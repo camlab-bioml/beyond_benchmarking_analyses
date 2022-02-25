@@ -1,0 +1,279 @@
+import pandas as pd
+import yaml
+
+with open(r"/home/campbell/cfang/automl_scrna/scripts/config_files/experiments.yaml") as file:
+    exps = yaml.load(file, Loader=yaml.FullLoader)
+exps = exps.get("Experiments")
+with open(r"/home/campbell/cfang/automl_scrna/scripts/config_files/labelled_exps.yaml") as file:
+    labelled_exps = yaml.load(file, Loader=yaml.FullLoader)
+labelled_exps = labelled_exps.get("Labelled_Experiments")
+combo_names = [str(x) for x in range(1,325)]
+wildcard_constraints:
+    sample = "|".join(exps),
+    combo_name = "|".join(combo_names),
+    labelled_sample = "|".join(labelled_exps)
+
+rule all:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/data/experiments/{sample}/{sample}-SCE.RDS", sample=exps),
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/{sample}/{sample}res.dataset1.endOutputs.rds", sample=exps),
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/clusters/{sample}/{combo_name}.csv", sample=exps, combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/H5AD_files/{sample}/{combo_name}.h5ad", sample=exps, combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/metrics/{sample}/metrics-{sample}-{combo_name}.csv", sample=exps, combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/metrics/metrics_matrices/{sample}-metrics.csv", sample=exps),
+        expand("/home/campbell/cfang/automl_scrna/results/metrics/{metric}_unscaled.csv", metric=["sil", "db", "ch"]),
+        f"/home/campbell/cfang/automl_scrna/data/experiments/colData.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/metrics/all_metrics.RDS",
+        f"/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled.RDS",
+        expand("/home/campbell/cfang/automl_scrna/data/labelled_experiments/{labelled_sample}/ExpDesign-labels-{labelled_sample}.tsv", labelled_sample=labelled_exps),
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/labelled_clusters/{labelled_sample}/{combo_name}-labelled.csv", labelled_sample = labelled_exps, combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/{labelled_sample}/{combo_name}.csv", labelled_sample=labelled_exps, combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/metrics_matrices/{labelled_sample}-supervised.csv", labelled_sample = labelled_exps),
+        expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/{sup_metric}_unscaled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"]),
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters.csv",
+        expand("/home/campbell/cfang/automl_scrna/results/gsea_results/{sample}-{combo_name}-gsea.csv", sample=exps, combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{sample}-gsea.csv", sample=exps),
+        expand("/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{sample}-gsea-averaged.csv", sample=exps),
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/all_gsea_means.csv",
+        "/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedSil.RDS",
+        "/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedDB.RDS",
+        "/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedCH.RDS"
+rule create_sce:
+    input:
+        f"/home/campbell/cfang/automl_scrna/data/experiments/{{sample}}"
+    output:
+        f"/home/campbell/cfang/automl_scrna/data/experiments/{{sample}}/{{sample}}-SCE.RDS"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+        mem_mb=15000
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/create_sce.R {input[0]}"
+rule run_pipeline:
+    input:
+        f"/home/campbell/cfang/automl_scrna/scripts/config_files/alternatives.yaml",
+        f"/home/campbell/cfang/automl_scrna/data/experiments/{{sample}}/{{sample}}-SCE.RDS"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/{{sample}}/{{sample}}res.dataset1.endOutputs.rds",
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+         mem_mb=128900
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/run_pipecomp.R {input[0]} {input[1]}"
+rule split_clusters:
+    input:
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/{{all_sample}}/{{all_sample}}res.dataset1.endOutputs.rds"
+    output:
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/clusters/{{all_sample}}/{combo_name}.csv", combo_name=combo_names),
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/H5AD_files/{{all_sample}}/{combo_name}.h5ad", combo_name=combo_names)
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+        mem_mb=128900
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/split_clusters.R {input[0]}"
+rule compute_metrics:
+    input:
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/H5AD_files/{{sample}}/{{combo_name}}.h5ad",
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/clusters/{{sample}}/{{combo_name}}.csv"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/metrics/{{sample}}/metrics-{{sample}}-{{combo_name}}.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+        mem_mb=50000
+    shell:
+        "python3 /home/campbell/cfang/automl_scrna/scripts/python_scripts/metrics.py --sce {input[0]} --clust {input[1]}"
+rule make_metrics_matrices:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/metrics/{{sample}}/metrics-{{sample}}-{combo_name}.csv",combo_name=combo_names)
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/metrics/metrics_matrices/{{sample}}-metrics.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/make_metrics_matrix.R {input}"
+rule aggregate_all_metrics:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/metrics/metrics_matrices/{sample}-metrics.csv", sample=exps)
+    output:
+        expand("/home/campbell/cfang/automl_scrna/results/metrics/{metric}_unscaled.csv", metric=["sil", "db", "ch"]),
+        f"/home/campbell/cfang/automl_scrna/results/metrics/all_metrics.RDS"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/aggregate_all_metrics.R {input}"
+rule extract_colData:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/data/experiments/{sample}/{sample}-SCE.RDS", sample=exps)
+    output:
+        f"/home/campbell/cfang/automl_scrna/data/experiments/colData.RDS",
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+        mem_mb=150000
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/extract_colData.R {input}"
+rule create_design_matrix:
+    input:
+        f"/home/campbell/cfang/automl_scrna/results/metrics/all_metrics.RDS",
+        f"/home/campbell/cfang/automl_scrna/data/experiments/colData.RDS"
+    output:
+        f"/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled.RDS"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/create_design_matrix.R {input}"
+
+rule download_cell_labels:
+    output:
+        f"/home/campbell/cfang/automl_scrna/data/labelled_experiments/{{labelled_sample}}/ExpDesign-labels-{{labelled_sample}}.tsv"
+    shell:
+        "curl --output {output} https://www.ebi.ac.uk/gxa/sc/experiment/{wildcards.labelled_sample}/download?fileType=experiment-design&accessKey="
+rule merge_labels_with_clusters:
+    input:
+        f"/home/campbell/cfang/automl_scrna/data/labelled_experiments/{{labelled_sample}}/ExpDesign-labels-{{labelled_sample}}.tsv",
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/clusters/{{labelled_sample}}/{combo_name}.csv", combo_name=combo_names)
+    output:
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/labelled_clusters/{{labelled_sample}}/{combo_name}-labelled.csv", combo_name=combo_names)
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/supervised_metrics_clusts.R {input}"
+rule compute_supervised_metrics:
+    input:
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/labelled_clusters/{{labelled_sample}}/{{combo_name}}-labelled.csv"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/supervised_metrics/{{labelled_sample}}/{{combo_name}}.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+        mem_mb=30000
+    shell:
+        "python3 /home/campbell/cfang/automl_scrna/scripts/python_scripts/supervised_metrics.py --clust {input[0]}"
+rule make_supervised_matrices:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/{{labelled_sample}}/{combo_name}.csv", combo_name=combo_names)
+    output:
+        #expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/{{labelled_sample}}/{sup_metric}_unscaled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"])
+        f"/home/campbell/cfang/automl_scrna/results/supervised_metrics/metrics_matrices/{{labelled_sample}}-supervised.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/make_supervised_matrices.R {input}"
+rule aggregate_super_metrics:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/metrics_matrices/{labelled_sample}-supervised.csv", labelled_sample=labelled_exps)
+    output:
+        expand("/home/campbell/cfang/automl_scrna/results/supervised_metrics/{sup_metric}_unscaled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"])
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/aggregate_super_metrics.R {input}"
+rule random_forest:
+    input:
+        "/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled.RDS",
+        "/home/campbell/cfang/automl_scrna/results/supervised_metrics/ari_unscaled.csv"
+    output:
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/random_forest.R {input}"
+rule num_clusts:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/{sample}/{sample}res.dataset1.endOutputs.rds", sample=exps)
+    output:
+        "/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/find_num_clusters.R {input}"
+rule compute_gsea_split:
+    input:
+        f"/home/campbell/cfang/automl_scrna/data/experiments/{{sample}}/{{sample}}-SCE.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/{{sample}}/{{sample}}res.dataset1.endOutputs.rds"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/{{sample}}-{{combo_name}}-gsea.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    resources:
+         mem_mb=28000
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/run_gsea_split.R {input} {wildcards.combo_name}"
+rule make_gsea_matrices:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/gsea_results/{{sample}}-{combo_name}-gsea.csv", combo_name=combo_names),
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/{{sample}}/{{sample}}res.dataset1.endOutputs.rds"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{{sample}}-gsea.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/make_gsea_matrices.R {input}"
+# rule aggregate_gsea:
+#     input:
+#         expand("/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{sample}-gsea.csv", sample=exps)
+#     output:
+#         f"/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/all-exps-gsea.csv"
+#     container:
+#         "/home/campbell/cfang/pipecomp-singularity.sif"
+#     shell:
+#         "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/aggregate_gsea.R"
+rule average_gsea:
+    input:
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{{sample}}-gsea.csv"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{{sample}}-gsea-averaged.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/average_gsea.R {input}"
+rule aggregate_gsea_means:
+    input:
+        expand("/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/{sample}-gsea-averaged.csv", sample=exps)
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/all_gsea_means.csv"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/aggregate_gsea_means.R {input}"
+rule tuneRF:
+    input:
+        f"/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/supervised_metrics/ari_unscaled.csv",
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters.csv",
+        f"/home/campbell/cfang/automl_scrna/data/avg_expr_pca_scores.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/all_gsea_means.csv"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedSil.RDS"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/tuneRF.R {input}"
+rule tuneRFDB:
+    input:
+        f"/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/supervised_metrics/ari_unscaled.csv",
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters.csv",
+        f"/home/campbell/cfang/automl_scrna/data/avg_expr_pca_scores.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/all_gsea_means.csv"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedDB.RDS"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/tuneRFdb.R {input}"
+rule tuneRFCH:
+    input:
+        f"/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/supervised_metrics/ari_unscaled.csv",
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters.csv",
+        f"/home/campbell/cfang/automl_scrna/data/avg_expr_pca_scores.RDS",
+        f"/home/campbell/cfang/automl_scrna/results/gsea_results/all_gsea_means.csv"
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedCH.RDS"
+    container:
+        "/home/campbell/cfang/pipecomp-singularity.sif"
+    shell:
+        "Rscript /home/campbell/cfang/automl_scrna/scripts/Rscripts/tuneRFch.R {input}"
