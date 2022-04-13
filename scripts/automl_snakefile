@@ -39,10 +39,6 @@ rule all:
         expand("results/gsea_results/gsea_matrices/{sample}-gsea.csv", sample=exps),
         expand("results/gsea_results/gsea_matrices/{sample}-gsea-averaged.csv", sample=exps),
         f"results/gsea_results/all_gsea_means.csv",
-        #"results/tuneRF/RFTunedSil.RDS",
-        #"results/tuneRF/RFTunedDB.RDS",
-        #"results/tuneRF/RFTunedCH.RDS",
-        #"results/tuneRF/RFTunedgsea.RDS",
         f"data/avg_expr_pca.RDS",
         f"data/train_test_split.RDS",
         f"data/uncorrected_designMatrix_scaled_cleaned.RDS",
@@ -53,8 +49,6 @@ rule all:
         f"data/corrected_RF_testMatFactor_unscaled.RDS",
         f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
         f"data/corrected_RF_testMatNumeric_unscaled.RDS",
-        #f"results/models/randomForest/RFresults.RDS",
-        #f"results/models/randomForest/RFPreds.RDS",
         expand("results/tuneRF/RFTuned{metric}_{RFType}Params.RDS", metric=metrics, RFType = RFTypes),
         expand("results/models/randomForest/RFPreds_{RFType}Params.RDS", RFType=RFTypes),
         expand("results/figures/RFPlots/RFPlots_{RFType}Params.RDS",RFType=RFTypes)
@@ -68,7 +62,7 @@ rule create_sce:
     resources:
         mem_mb=15000
     shell:
-        "Rscript scripts/Rscripts/create_sce.R {input[0]}"
+        "Rscript scripts/Rscripts/clustering/create_sce.R {input[0]}"
 rule run_pipeline:
     input:
         f"scripts/config_files/alternatives.yaml",
@@ -80,7 +74,7 @@ rule run_pipeline:
     resources:
          mem_mb=128900
     shell:
-        "Rscript scripts/Rscripts/run_pipecomp.R {input[0]} {input[1]}"
+        "Rscript scripts/Rscripts/clustering/run_pipecomp.R {input[0]} {input[1]}"
 rule split_clusters:
     input:
         f"results/pipecomp_outputs/{{all_sample}}/{{all_sample}}res.dataset1.endOutputs.rds"
@@ -92,7 +86,7 @@ rule split_clusters:
     resources:
         mem_mb=128900
     shell:
-        "Rscript scripts/Rscripts/split_clusters.R {input[0]}"
+        "Rscript scripts/Rscripts/clustering/split_clusters.R {input[0]}"
 rule compute_metrics:
     input:
         f"results/pipecomp_outputs/H5AD_files/{{sample}}/{{combo_name}}.h5ad",
@@ -113,7 +107,7 @@ rule make_metrics_matrices:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/make_metrics_matrix.R {input}"
+        "Rscript scripts/Rscripts/metrics/make_metrics_matrix.R {input}"
 rule aggregate_all_metrics:
     input:
         expand("results/metrics/metrics_matrices/{sample}-metrics.csv", sample=exps)
@@ -123,7 +117,7 @@ rule aggregate_all_metrics:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/aggregate_all_metrics.R {input}"
+        "Rscript scripts/Rscripts/metrics/aggregate_all_metrics.R {input}"
 rule extract_colData:
     input:
         expand("data/experiments/{sample}/{sample}-SCE.RDS", sample=exps)
@@ -134,7 +128,7 @@ rule extract_colData:
     resources:
         mem_mb=150000
     shell:
-        "Rscript scripts/Rscripts/extract_colData.R {input}"
+        "Rscript scripts/Rscripts/metrics/extract_colData.R {input}"
 rule create_design_matrix:
     input:
         f"results/metrics/all_metrics.RDS",
@@ -144,7 +138,7 @@ rule create_design_matrix:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/create_design_matrix.R {input}"
+        "Rscript scripts/Rscripts/metrics/create_design_matrix.R {input}"
 rule download_cell_labels:
     output:
         f"data/labelled_experiments/{{labelled_sample}}/ExpDesign-labels-{{labelled_sample}}.tsv"
@@ -159,7 +153,7 @@ rule merge_labels_with_clusters:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/supervised_metrics_clusts.R {input}"
+        "Rscript scripts/Rscripts/metrics/supervised_metrics_clusts.R {input}"
 rule compute_supervised_metrics:
     input:
         f"results/pipecomp_outputs/labelled_clusters/{{labelled_sample}}/{{combo_name}}-labelled.csv"
@@ -180,7 +174,7 @@ rule make_supervised_matrices:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/make_supervised_matrices.R {input}"
+        "Rscript scripts/Rscripts/metrics/make_supervised_matrices.R {input}"
 rule aggregate_super_metrics:
     input:
         expand("results/supervised_metrics/metrics_matrices/{labelled_sample}-supervised.csv", labelled_sample=labelled_exps)
@@ -189,16 +183,16 @@ rule aggregate_super_metrics:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript ../scripts/Rscripts/aggregate_super_metrics.R {input}"
-rule random_forest:
-    input:
-        "data/uncorrected_designMatrix_scaled.RDS",
-        "results/supervised_metrics/ari_unscaled.csv"
-    output:
-    container:
-        "../pipecomp-singularity.sif"
-    shell:
-        "Rscript scripts/Rscripts/random_forest.R {input}"
+        "Rscript ../scripts/Rscripts/metrics/aggregate_super_metrics.R {input}"
+# rule random_forest:
+#     input:
+#         "data/uncorrected_designMatrix_scaled.RDS",
+#         "results/supervised_metrics/ari_unscaled.csv"
+#     output:
+#     container:
+#         "../pipecomp-singularity.sif"
+#     shell:
+#         "Rscript scripts/Rscripts/random_forest.R {input}"
 rule num_clusts:
     input:
         expand("results/pipecomp_outputs/{sample}/{sample}res.dataset1.endOutputs.rds", sample=exps)
@@ -207,7 +201,7 @@ rule num_clusts:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/find_num_clusters.R {input}"
+        "Rscript scripts/Rscripts/metrics/find_num_clusters.R {input}"
 rule compute_gsea_split:
     input:
         f"data/experiments/{{sample}}/{{sample}}-SCE.RDS",
@@ -219,7 +213,7 @@ rule compute_gsea_split:
     resources:
          mem_mb=28000
     shell:
-        "Rscript scripts/Rscripts/run_gsea_split.R {input} {wildcards.combo_name}"
+        "Rscript scripts/Rscripts/metrics/gsea/run_gsea_split.R {input} {wildcards.combo_name}"
 rule make_gsea_matrices:
     input:
         expand("results/gsea_results/{{sample}}-{combo_name}-gsea.csv", combo_name=combo_names),
@@ -229,7 +223,7 @@ rule make_gsea_matrices:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/make_gsea_matrices.R {input}"
+        "Rscript scripts/Rscripts/metrics/gsea/make_gsea_matrices.R {input}"
 # rule aggregate_gsea:
 #     input:
 #         expand("results/gsea_results/gsea_matrices/{sample}-gsea.csv", sample=exps)
@@ -247,7 +241,7 @@ rule average_gsea:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/average_gsea.R {input}"
+        "Rscript scripts/Rscripts/metrics/gsea/average_gsea.R {input}"
 rule aggregate_gsea_means:
     input:
         expand("results/gsea_results/gsea_matrices/{sample}-gsea-averaged.csv", sample=exps)
@@ -256,7 +250,7 @@ rule aggregate_gsea_means:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/aggregate_gsea_means.R {input}"
+        "Rscript scripts/Rscripts/metrics/gsea/aggregate_gsea_means.R {input}"
 rule train_test_split:
     input:
         f"data/uncorrected_designMatrix_scaled.RDS",
@@ -266,7 +260,7 @@ rule train_test_split:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/train_test_split.R {input}"
+        "Rscript scripts/Rscripts/randomForest/train_test_split.R {input}"
 rule gene_expression_pca:
     input:
         expand("data/experiments/{sample}/{sample}-SCE.RDS", sample=exps),
@@ -276,7 +270,7 @@ rule gene_expression_pca:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/gene_expr_pca.R {input}"
+        "Rscript scripts/Rscripts/metrics/gene_expr_pca.R {input}"
 rule clean_RF_data:
     input:
         f"data/uncorrected_designMatrix_scaled.RDS",
@@ -290,7 +284,7 @@ rule clean_RF_data:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/clean_RF_data.R {input}"
+        "Rscript scripts/Rscripts/randomForest/clean_RF_data.R {input}"
 rule correct_metrics:
     input:
         f"data/uncorrected_designMatrix_scaled_cleaned.RDS",
@@ -302,7 +296,7 @@ rule correct_metrics:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/correct_metrics.R {input}"
+        "Rscript scripts/Rscripts/metrics/correct_metrics.R {input}"
 rule create_RF_mat:
     input:
         f"data/corrected_designMat_unscaled.RDS",
@@ -315,7 +309,7 @@ rule create_RF_mat:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/createRFMat.R {input}"
+        "Rscript scripts/Rscripts/randomForest/createRFMat.R {input}"
 rule tuneRF:
     input:
         f"data/corrected_RF_trainMat{{RFType}}_unscaled.RDS"
@@ -324,7 +318,7 @@ rule tuneRF:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/tuneRF.R {input} {wildcards.metric}"
+        "Rscript scripts/Rscripts/randomForest/tuneRF.R {input} {wildcards.metric}"
 rule predict_from_tuned_RF:
     input:
         f"data/corrected_RF_trainMat{{RFType}}_unscaled.RDS",
@@ -335,7 +329,7 @@ rule predict_from_tuned_RF:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/RFPredictFromTuned.R {input} {wildcards.RFType}"
+        "Rscript scripts/Rscripts/randomForest/RFPredictFromTuned.R {input} {wildcards.RFType}"
 rule plot_RF_results:
     input:
         f"results/models/randomForest/RFPreds_{{RFType}}Params.RDS",
@@ -346,4 +340,4 @@ rule plot_RF_results:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript  scripts/Rscripts/plotRFResults.R {input} {wildcards.RFType}"
+        "Rscript  scripts/Rscripts/plotting/plotRFResults.R {input} {wildcards.RFType}"
