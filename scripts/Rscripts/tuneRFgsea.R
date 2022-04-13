@@ -44,6 +44,7 @@ avg_expr_scores <- avg_expr_scores[,1:20]
 avg_expr_scores <- cbind(name=rownames(avg_expr_scores), avg_expr_scores)
 rownames(avg_expr_scores) <- NULL
 avg_expr_scores <- as_tibble(avg_expr_scores)
+print(head(avg_expr_scores))
 
 designMat <- merge(designMat, avg_expr_scores, by="name")
 
@@ -97,5 +98,6 @@ tuneRFCV <- function(trainMat, testMat, trainScores, testScores){
   return(model)
 }
 
-dbModel <- tuneRFCV(trainMat, testMat, designMatTrain$dbCorImp, designMatTest$dbCorImp)
-saveRDS(dbModel, "/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedDB.RDS")
+gseaModel <- tuneRFCV(trainMat, testMat, designMatTrain$gseaScaledImp, designMatTest$gseaScaledImp)
+saveRDS(gseaModel, "/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedgsea.RDS")
+

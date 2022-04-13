@@ -6,6 +6,7 @@ suppressPackageStartupMessages({
   library(Matrix) # CRAN
   library(purrr)
   library(ggplot2)
+  library(Metrics)
   library(gridExtra)
   library(caret)
   library(matrixStats)
@@ -14,6 +15,7 @@ suppressPackageStartupMessages({
   library(stringr)
   library(stringi)
 })
+
 numbers_only <- function(x) {
   sum(suppressWarnings(!is.na(as.numeric(as.character(x))))) == length(x)
 }
@@ -28,7 +30,7 @@ createRFMat <- function(designMat){
   df$filt <- as.factor(df$filt)
   df$norm <- as.factor(df$norm)
   df$res <- as.numeric(res)
-  df$dim <- as.numeric(dims)
+  df$dims <- as.numeric(dims)
   return(df)
 }
 
@@ -38,6 +40,7 @@ designMat <- readRDS(args[[1]])
 ari <- readRDS(args[[2]])
 trainTestSplit <- readRDS(args[[3]])
 exprScores <- readRDS(args[[4]])
+print(head(exprScores))
 
 avg_expr_scores <- rbind(exprScores$trainExpr, exprScores$testExpr)
 avg_expr_scores <- avg_expr_scores[,1:20]
@@ -55,49 +58,40 @@ designMatTest <- designMat[which(designMat$name %in% trainTestSplit$test),]
 trainMat <- createRFMat(designMatTrain)
 testMat <- createRFMat(designMatTest)
 
-# Random forest
-tuneRFCV <- function(trainMat, testMat, trainScores, testScores){
-  customRF <- list(type = "Regression",
-                   library = "randomForest",
-                   loop = NULL)
+trainRF <- function(trainData, testData, trainScores, testScores, mtry, ntree=150){
+  trainName <- trainData$name
+  trainPipelines <- trainData$pipelines
+  trainData$name <- NULL
+  trainData$pipelines <- NULL
   
-  trainMat$name <- NULL
-  trainMat$pipelines <- NULL
-  testMat$name <- NULL
-  testMat$pipelines <- NULL
+  testName <- testData$name
+  testPipelines <- testData$pipelines
+  testData$name <- NULL
+  testData$pipelines <- NULL
   
-  customRF$parameters <- data.frame(parameter = c("mtry", "ntree"),
-                                    class = rep("numeric", 2),
-                                    label = c("mtry", "ntree"))
+  rf <- randomForest(data.matrix(trainData), as.numeric(trainScores), mtry=mtry, ntree=ntree)
+  preds <- predict(rf, newdata=data.matrix(testData))
   
-  customRF$grid <- function(x, y, len = NULL, search = "grid") {}
+  testRsq <- R2(preds, as.numeric(testScores))
+  trainPreds <- predict(rf, newdata=data.matrix(trainData))
+  trainRsq <- R2(trainPreds, as.numeric(trainScores))
   
-  customRF$fit <- function(x, y, wts, param, lev, last, weights, classProbs) {
-    randomForest(x, y,
-                 mtry = param$mtry,
-                 ntree=param$ntree)
-  }
-  
-  #Predict label
-  customRF$predict <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
-    predict(modelFit, newdata)
-  
-  #Predict prob
-  customRF$prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
-    predict(modelFit, newdata, type = "response")
-  
-  customRF$sort <- function(x) x[order(x[,1]),]
-  customRF$levels <- function(x) x$classes
-  
-  control <- trainControl(method="repeatedcv", number=10, repeats=3)
-  tunegrid <- expand.grid(.mtry=c(20:40),.ntree=c(150))
-  # train the model
-  model <- train(x=data.matrix(trainMat), y=as.numeric(trainScores), method=customRF, trControl=control, tuneGrid=tunegrid)
-  # summarize the model   
-  print(model)
-  return(model)
+  trainData <- cbind(pipelines=trainPipelines, name=trainName, trainData, Actual=trainScores)
+  testData <- cbind(pipelines=testPipelines, name=testName, testData, Actual=testScores)
+  res <- list(Rsqs=c(testRsq, trainRsq), model=rf, testPreds=preds, trainPreds=trainPreds, testData=testData, trainData=trainData, mtry=mtry, ntree=ntree)
+  return(res)
 }
 
-chModel <- tuneRFCV(trainMat, testMat, designMatTrain$chCorImp, designMatTest$chCorImp)
-saveRDS(chModel, "/home/campbell/cfang/automl_scrna/results/tuneRF/RFTunedCH.RDS")
+print("sil")
+silRF <- trainRF(trainMat, testMat, designMatTrain$silCorImp, designMatTest$silCorImp, mtry=40)
+print("db")
+dbRF <- trainRF(trainMat, testMat, designMatTrain$dbCorImp, designMatTest$dbCorImp, mtry=40)
+print("ch")
+chRF <- trainRF(trainMat, testMat, designMatTrain$chCorImp, designMatTest$chCorImp, mtry=40)
+print("gsea")
+gseaRF <- trainRF(trainMat, testMat, designMatTrain$gseaScaledImp, designMatTest$gseaScaledImp, mtry=40)
+
+
+models <- list(sil=silRF, db=dbRF, ch=chRF, gsea=gseaRF)
+saveRDS(models, "/home/campbell/cfang/automl_scrna/results/models/randomForest/RFresults.RDS")
 
