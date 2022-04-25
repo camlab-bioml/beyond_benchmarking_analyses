@@ -58,20 +58,22 @@ gseaImp <- gseaImp %>%
 colnames(gseaImp)[[3]] <- "gseaScaledImp"
 
 print(head(gseaImp))
+print(head(designMat))
+
 designMat <- merge(designMat, gseaImp, by=c("pipelines", "name")) 
 
 print(head(designMat))
 silScoresCorrected <- designMat %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(silCor=resid(loess(as.numeric(.$sil) ~ as.numeric(.$nclusts) ), na.action=na.exclude), pipelines=.$pipelines)))
+  group_modify(~ as.data.frame(cbind(silCor=resid(loess(as.numeric(.$sil) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude), pipelines=.$pipelines)))
 
 dbScoresCorrected <- designMat %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(dbCor=resid(loess(as.numeric(.$db) ~ as.numeric(.$nclusts) ), na.action=na.exclude),pipelines=.$pipelines)))
+  group_modify(~ as.data.frame(cbind(dbCor=resid(loess(as.numeric(.$db) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude),pipelines=.$pipelines)))
 
 chScoresCorrected <- designMat %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(chCor=resid(loess(as.numeric(.$ch) ~ as.numeric(.$nclusts) ), na.action=na.exclude),pipelines=.$pipelines)))
+  group_modify(~ as.data.frame(cbind(chCor=resid(loess(as.numeric(.$ch) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude),pipelines=.$pipelines)))
 
 designMat <- merge(designMat, silScoresCorrected, by=c("name","pipelines"))
 designMat <- merge(designMat, dbScoresCorrected, by=c("name","pipelines"))
