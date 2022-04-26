@@ -24,10 +24,10 @@ means <- args[-length(args)] %>%
 
 # Get experiment names 
 expNames <- strsplit(args[-length(args)], split="/") %>%
-  map(8) %>% # Change this later to match snakemake paths
+  map(3) %>% # Change this later to match snakemake paths
   unlist()
 colnames(means) <- expNames
-print(means)
+#print(means)
 
 # Split into train/test
 trainMeans <- means[,which(colnames(means) %in% trainTestSplit$train)]
@@ -35,6 +35,10 @@ testMeans <- means[,which(colnames(means) %in% trainTestSplit$test)]
 
 trainMeans <- t(trainMeans)
 testMeans <- t(testMeans)
+
+#print(trainMeans)
+print(dim(trainMeans))
+print(dim(testMeans))
 
 ppcaTrain <- ppca(as.matrix(trainMeans), nPcs=20)
 ppcaTest <- predict(ppcaTrain, newdata = as.matrix(testMeans))

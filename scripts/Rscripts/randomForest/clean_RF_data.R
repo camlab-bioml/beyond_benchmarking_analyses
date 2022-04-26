@@ -53,6 +53,11 @@ rownames(avg_expr_scores) <- NULL
 avg_expr_scores <- as_tibble(avg_expr_scores)
 designMat <- merge(designMat, avg_expr_scores, by="name")
 
+designMat$total <- NULL
+designMat$pct_coding <- NULL
+designMat$pct_ribosomal <- NULL
+designMat$pct_counts_Mt <- NULL
+
 print(head(designMat))
 
 saveRDS(designMat, "/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled_cleaned.RDS")
