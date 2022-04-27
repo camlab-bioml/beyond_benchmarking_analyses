@@ -25,7 +25,7 @@ tuneRFCV <- function(trainMat, trainScores){
                    library = "randomForest",
                    loop = NULL)
   
-  trainMat$name <- NULL
+  #trainMat$name <- NULL
   trainMat$pipelines <- NULL
   
   customRF$parameters <- data.frame(parameter = c("mtry", "ntree"),
@@ -51,8 +51,12 @@ tuneRFCV <- function(trainMat, trainScores){
   customRF$sort <- function(x) x[order(x[,1]),]
   customRF$levels <- function(x) x$classes
   
-  control <- trainControl(method="repeatedcv", number=10, repeats=3)
-  tunegrid <- expand.grid(.mtry=c(1:40),.ntree=c(100, 150))
+  # Create dataset-aware folds
+  folds <- groupKFold(trainMat$name, k=10)
+  trainMat$name <- NULL
+  
+  control <- trainControl(method="repeatedcv", number=10, repeats=3, index=folds)
+  tunegrid <- expand.grid(.mtry=c(1:ncol(trainMat)),.ntree=c(150))
   # train the model
   model <- train(x=trainMat, y=as.numeric(trainScores), method=customRF, trControl=control, tuneGrid=tunegrid)
   # summarize the model   
