@@ -23,9 +23,9 @@ def compute_metrics(clust_path):
     return scores
 
 def save_metrics(clustering_metrics, clust_path):
-    csv_name = clust_path.split("/")[8]
+    csv_name = clust_path.split("/")[3]
     csv_name = csv_name.split("-labelled.csv")[0]
-    combo_name = clust_path.split("/")[9]
+    combo_name = clust_path.split("/")[4]
     combo_name = combo_name.split("-labelled.csv")[0]
     print(combo_name)
     print(csv_name)

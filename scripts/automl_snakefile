@@ -51,7 +51,8 @@ rule all:
         f"data/corrected_RF_testMatNumeric_unscaled.RDS",
         expand("results/tuneRF/RFTuned{metric}_{RFType}Params.RDS", metric=metrics, RFType = RFTypes),
         expand("results/models/randomForest/RFPreds_{RFType}Params.RDS", RFType=RFTypes),
-        expand("results/figures/RFPlots/RFPlots_{RFType}Params.RDS",RFType=RFTypes)
+        expand("results/figures/RFPlots/RFPlots_{RFType}Params.RDS",RFType=RFTypes),
+        "results/models/linearRegression/linearRegressionPreds.RDS"
 rule create_sce:
     input:
         f"data/experiments/{{sample}}"
@@ -183,7 +184,7 @@ rule aggregate_super_metrics:
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript ../scripts/Rscripts/metrics/aggregate_super_metrics.R {input}"
+        "Rscript scripts/Rscripts/metrics/aggregate_super_metrics.R {input}"
 # rule random_forest:
 #     input:
 #         "data/uncorrected_designMatrix_scaled.RDS",
@@ -334,10 +335,31 @@ rule plot_RF_results:
     input:
         f"results/models/randomForest/RFPreds_{{RFType}}Params.RDS",
         f"data/corrected_designMat_unscaled.RDS",
-        f"results/supervised_metrics/ari_unscaled.csv"
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
     output:
         f"results/figures/RFPlots/RFPlots_{{RFType}}Params.RDS"
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript  scripts/Rscripts/plotting/plotRFResults.R {input} {wildcards.RFType}"
+        "Rscript scripts/Rscripts/plotting/plotRFResults.R {input} {wildcards.RFType}"
+rule linear_regression:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled.RDS"
+    output:
+        "results/models/linearRegression/linearRegressionPreds.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/linearRegression.R {input}"
+# rule plot_LR_results:
+#     input:
+#         "results/models/linearRegression/linearRegressionPreds.RDS",
+#         f"data/corrected_designMat_unscaled.RDS",
+#         f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+#     output:
+#         f"results/figures/LRPlots/LRPlots_NumericParams.RDS"
+#     container:
+#         "../pipecomp-singularity.sif"
+#     shell:
+#         "Rscript scripts/Rscripts/plotting/plotRFResults.R {input} Numeric"

@@ -1,11 +1,11 @@
 suppressPackageStartupMessages({
   library(scater) # BioConductor
   library(SingleCellExperiment) # BioConductor
-  library(DropletUtils) # BioConductor
+  #library(DropletUtils) # BioConductor
   library(tidyverse) # CRAN
   library(here) # CRAN
   library(DT) # CRAN
-  library(pheatmap) # CRAN
+  #library(pheatmap) # CRAN
   library(here)
   library(Matrix)
 })
@@ -60,7 +60,7 @@ for (path in clustersPaths){
   print(head(clust_labels))
   
   run <- strsplit(path, split=".csv")[[1]][[1]]
-  run <- strsplit(run, split="/")[[1]][[10]]
+  run <- strsplit(run, split="/")[[1]][[5]]
   print(run)
   
   clust_labels_name <- paste0(run, "-labelled.csv")

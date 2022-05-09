@@ -52,11 +52,12 @@ tuneRFCV <- function(trainMat, trainScores){
   customRF$levels <- function(x) x$classes
   
   # Create dataset-aware folds
+  set.seed(1)
   folds <- groupKFold(trainMat$name, k=10)
   trainMat$name <- NULL
   
   control <- trainControl(method="repeatedcv", number=10, repeats=3, index=folds)
-  tunegrid <- expand.grid(.mtry=c(1:ncol(trainMat)),.ntree=c(150))
+  tunegrid <- expand.grid(.mtry=c(1:ncol(trainMat)),.ntree=c(100, 300, 500))
   # train the model
   model <- train(x=trainMat, y=as.numeric(trainScores), method=customRF, trControl=control, tuneGrid=tunegrid)
   # summarize the model   
