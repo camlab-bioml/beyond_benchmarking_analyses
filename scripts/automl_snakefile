@@ -9,7 +9,7 @@ with open(r"scripts/config_files/labelled_exps.yaml") as file:
 labelled_exps = labelled_exps.get("Labelled_Experiments")
 combo_names = [str(x) for x in range(1,325)]
 metrics = ["sil", "db", "ch", "gsea"]
-RFTypes = ["Factor", "Numeric"]
+RFTypes = ["Numeric"]
 wildcard_constraints:
     sample = "|".join(exps),
     combo_name = "|".join(combo_names),
@@ -45,14 +45,35 @@ rule all:
         f"results/supervised_metrics/ari_unscaled_cleaned.RDS",
         f"results/pipecomp_outputs/num_clusters_cleaned.RDS",
         f"data/corrected_designMat_unscaled.RDS",
-        f"data/corrected_RF_trainMatFactor_unscaled.RDS",
-        f"data/corrected_RF_testMatFactor_unscaled.RDS",
         f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
         f"data/corrected_RF_testMatNumeric_unscaled.RDS",
         expand("results/tuneRF/RFTuned{metric}_{RFType}Params.RDS", metric=metrics, RFType = RFTypes),
         expand("results/models/randomForest/RFPreds_{RFType}Params.RDS", RFType=RFTypes),
-        expand("results/figures/RFPlots/RFPlots_{RFType}Params.RDS",RFType=RFTypes),
-        "results/models/linearRegression/linearRegressionPreds.RDS"
+        expand("results/figures/RFPlots/RFPlots_{RFType}Params.pdf",RFType=RFTypes),
+        "results/figures/randomForest/datasetFeaturePerformanceHeatmaps.pdf",
+        "results/figures/randomForest/predictionMetricCorBoxplot.pdf",
+        "results/figures/randomForest/predMetricCorBar.pdf",
+        "results/figures/randomForest/predictionsARICorBoxplot.pdf",
+        "results/figures/randomForest/ariCorBar.pdf",
+        "results/models/linearRegression/linearRegressionPreds.RDS",
+        "results/figures/RFPlots/RF_featImp.pdf",
+        f"results/figures/LRPlots/LRPlots.pdf",
+        "results/figures/linearRegression/datasetFeaturePerformanceHeatmapsLR.pdf",
+        "results/figures/linearRegression/predictionMetricCorBoxplotLR.pdf",
+        "results/figures/linearRegression/predMetricCorBarLR.pdf",
+        "results/figures/linearRegression/predictionsARICorBoxplotLR.pdf",
+        "results/figures/linearRegression/ariCorBarLR.pdf",
+        f"results/figures/LRPlots/LR_featImp.pdf",
+        "results/figures/uncorrectedMetricsHeatmaps.pdf",
+        f"results/figures/datasetFeaturesHeatmap.pdf",
+        "results/paperData/pipelineParams.csv",
+        "results/paperData/datasetFeatures.csv",
+        "results/paperData/silCorrectedImputed.csv",
+        "results/paperData/dbCorrectedImputed.csv",
+        "results/paperData/chCorrectedImputed.csv",
+        "results/paperData/gseaScaledImputed.csv",
+        "results/figures/randomForest/RFTuning.pdf",
+        "results/figures/linearRegression/LRTuning.pdf"
 rule create_sce:
     input:
         f"data/experiments/{{sample}}"
@@ -185,15 +206,6 @@ rule aggregate_super_metrics:
         "../pipecomp-singularity.sif"
     shell:
         "Rscript scripts/Rscripts/metrics/aggregate_super_metrics.R {input}"
-# rule random_forest:
-#     input:
-#         "data/uncorrected_designMatrix_scaled.RDS",
-#         "results/supervised_metrics/ari_unscaled.csv"
-#     output:
-#     container:
-#         "../pipecomp-singularity.sif"
-#     shell:
-#         "Rscript scripts/Rscripts/random_forest.R {input}"
 rule num_clusts:
     input:
         expand("results/pipecomp_outputs/{sample}/{sample}res.dataset1.endOutputs.rds", sample=exps)
@@ -225,15 +237,6 @@ rule make_gsea_matrices:
         "../pipecomp-singularity.sif"
     shell:
         "Rscript scripts/Rscripts/metrics/gsea/make_gsea_matrices.R {input}"
-# rule aggregate_gsea:
-#     input:
-#         expand("results/gsea_results/gsea_matrices/{sample}-gsea.csv", sample=exps)
-#     output:
-#         f"results/gsea_results/gsea_matrices/all-exps-gsea.csv"
-#     container:
-#         "../pipecomp-singularity.sif"
-#     shell:
-#         "Rscript scripts/Rscripts/aggregate_gsea.R"
 rule average_gsea:
     input:
         f"results/gsea_results/gsea_matrices/{{sample}}-gsea.csv"
@@ -303,14 +306,12 @@ rule create_RF_mat:
         f"data/corrected_designMat_unscaled.RDS",
         f"data/train_test_split.RDS"
     output:
-        f"data/corrected_RF_trainMatFactor_unscaled.RDS",
-        f"data/corrected_RF_testMatFactor_unscaled.RDS",
         f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
         f"data/corrected_RF_testMatNumeric_unscaled.RDS"
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/randomForest/createRFMat.R {input}"
+        "Rscript scripts/Rscripts/randomForest/createRFMatScaling.R {input}"
 rule tuneRF:
     input:
         f"data/corrected_RF_trainMat{{RFType}}_unscaled.RDS"
@@ -333,15 +334,20 @@ rule predict_from_tuned_RF:
         "Rscript scripts/Rscripts/randomForest/RFPredictFromTuned.R {input} {wildcards.RFType}"
 rule plot_RF_results:
     input:
-        f"results/models/randomForest/RFPreds_{{RFType}}Params.RDS",
+        f"results/models/randomForest/RFPreds_NumericParams.RDS",
         f"data/corrected_designMat_unscaled.RDS",
         f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
     output:
-        f"results/figures/RFPlots/RFPlots_{{RFType}}Params.RDS"
+        f"results/figures/RFPlots/RFPlots_NumericParams.pdf",
+        "results/figures/randomForest/datasetFeaturePerformanceHeatmaps.pdf",
+        "results/figures/randomForest/predictionMetricCorBoxplot.pdf",
+        "results/figures/randomForest/predMetricCorBar.pdf",
+        "results/figures/randomForest/predictionsARICorBoxplot.pdf",
+        "results/figures/randomForest/ariCorBar.pdf"
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/plotting/plotRFResults.R {input} {wildcards.RFType}"
+        "Rscript scripts/Rscripts/plotting/plotRFResults.R {input}"
 rule linear_regression:
     input:
         f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
@@ -352,14 +358,85 @@ rule linear_regression:
         "../pipecomp-singularity.sif"
     shell:
         "Rscript scripts/Rscripts/linearRegression/linearRegression.R {input}"
-# rule plot_LR_results:
-#     input:
-#         "results/models/linearRegression/linearRegressionPreds.RDS",
-#         f"data/corrected_designMat_unscaled.RDS",
-#         f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
-#     output:
-#         f"results/figures/LRPlots/LRPlots_NumericParams.RDS"
-#     container:
-#         "../pipecomp-singularity.sif"
-#     shell:
-#         "Rscript scripts/Rscripts/plotting/plotRFResults.R {input} Numeric"
+rule plot_LR_results:
+    input:
+        f"results/models/linearRegression/linearRegressionPreds.RDS",
+        f"data/corrected_designMat_unscaled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+    output:
+        f"results/figures/LRPlots/LRPlots.pdf",
+        "results/figures/linearRegression/datasetFeaturePerformanceHeatmapsLR.pdf",
+        "results/figures/linearRegression/predictionMetricCorBoxplotLR.pdf",
+        "results/figures/linearRegression/predMetricCorBarLR.pdf",
+        "results/figures/linearRegression/predictionsARICorBoxplotLR.pdf",
+        "results/figures/linearRegression/ariCorBarLR.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/plotting/plotLRResults.R {input}"
+
+rule plot_RF_featImp:
+    input:
+        f"results/models/randomForest/RFPreds_NumericParams.RDS"
+    output:
+        f"results/figures/RFPlots/RF_featImp.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/plotting/RFFeatureImportance.R {input}"
+rule plot_LR_featImp:
+    input:
+        "results/models/linearRegression/linearRegressionPreds.RDS"
+    output:
+        f"results/figures/LRPlots/LR_featImp.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/plotting/LRCoefsHeatmap.R {input}"
+rule plot_metrics_heatmaps:
+    input:
+        "data/uncorrected_designMatrix_scaled.RDS",
+        "results/pipecomp_outputs/num_clusters_cleaned.RDS",
+        "data/corrected_designMat_unscaled.RDS",
+        "data/corrected_RF_trainMatNumeric_unscaled.RDS",
+        "data/corrected_RF_testMatNumeric_unscaled.RDS"
+    output:
+        "results/figures/uncorrectedMetricsHeatmaps.pdf",
+        f"results/figures/datasetFeaturesHeatmap.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/plotting/paperHeatmaps.R {input}"
+rule save_paper_data:
+    input:
+        "results/pipecomp_outputs/num_clusters.csv",
+        "data/experiments/colData.RDS",
+        "results/metrics/sil_unscaled.csv",
+        "results/metrics/db_unscaled.csv",
+        "results/metrics/ch_unscaled.csv",
+        f"data/corrected_designMat_unscaled.RDS"
+    output:
+        "results/paperData/pipelineParams.csv",
+        "results/paperData/datasetFeatures.csv",
+        "results/paperData/silCorrectedImputed.csv",
+        "results/paperData/dbCorrectedImputed.csv",
+        "results/paperData/chCorrectedImputed.csv",
+        "results/paperData/gseaScaledImputed.csv",
+        "results/paperData/sil_unscaled.csv",
+        "results/paperData/db_unscaled.csv",
+        "results/paperData/ch_unscaled.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/saveMetricsDatatoCSV.R {input}"
+rule plot_models_tuning:
+    input:
+        expand("results/tuneRF/RFTuned{metric}_NumericParams.RDS", metric=metrics),
+        f"results/models/linearRegression/linearRegressionPreds.RDS"
+    output:
+        "results/figures/randomForest/RFTuning.pdf",
+        "results/figures/linearRegression/LRTuning.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/plotting/plotModelsTuning.R {input}"

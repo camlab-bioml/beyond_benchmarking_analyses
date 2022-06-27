@@ -53,7 +53,8 @@ predRF <- function(trainData, testData, trainScores, testScores, tunedRF){
   # Add pipelines and names back to data
   trainData <- cbind(pipelines=trainPipelines, name=trainName, trainData, Actual=trainScores)
   testData <- cbind(pipelines=testPipelines, name=testName, testData, Actual=testScores)
-  res <- list(Rsqs=c(testRsq, trainRsq), testPreds=preds, trainPreds=trainPreds, testData=testData, trainData=trainData, mtry=tunedRF$finalModel$tuneValue$mtry, ntree=tunedRF$finalModel$tuneValue$ntre)
+  print(tunedRF)
+  res <- list(Rsqs=c(testRsq, trainRsq), model=tunedRF, testPreds=preds, trainPreds=trainPreds, testData=testData, trainData=trainData, mtry=tunedRF$tuneValue$mtry, ntree=tunedRF$tuneValue$ntree)
   return(res)
 }
 

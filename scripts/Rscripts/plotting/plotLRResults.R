@@ -14,26 +14,20 @@ suppressPackageStartupMessages({
   library(ggforce)
   library(cowplot)
   library(ComplexHeatmap)
-  library(tidytext)
 })
 numbers_only <- function(x) {
   sum(suppressWarnings(!is.na(as.numeric(as.character(x))))) == length(x)
 }
 
 
-# models <- readRDS("RFPreds_NumericParams.RDS")
+# models <- readRDS("linearRegressionPreds.RDS")
 # designMat <- readRDS("corrected_designMat_unscaled.RDS")
 # ari <- readRDS("ari_unscaled_cleaned.RDS")
-# RFType <- "Numeric"
 
-args <- commandArgs(trailingOnly=TRUE)
-print(args)
-
+args <- commandArgs(trailingOnly = TRUE)
 models <- readRDS(args[[1]])
 designMat <- readRDS(args[[2]])
 ari <- readRDS(args[[3]])
-
-#RFType <- args[[4]]
 
 nclusts <- designMat %>%
   select(pipelines, name, nclusts)
@@ -72,7 +66,8 @@ createARIPlottingDfs <- function(preds, dataMat, ariMat){
 
 createPlottingDfs <- function(preds, dataMat){
   df <- cbind(dataMat, preds=preds) %>%
-    merge(nclusts, by=c("pipelines", "name"))
+    merge(nclusts, by=c("pipelines", "name")) %>%
+    rename(Actual = contains("Imp"))
   return(df)
 }
 
@@ -85,7 +80,8 @@ makeColdataDF <- function(R2df){
     select(c("name", "detected", "sum", "ncells", "ngenes", contains("_"))) %>%
     distinct() %>%
     pivot_longer(!name, names_to="dataType") %>%
-    merge(R2df, by="name")
+    merge(R2df, by="name") #%>%
+  #mutate(PredPower = if_else(Cor >= 0.3, "R2 >= 0.1", "R2 < 0.1"))
   return(dMat)
 }
 
@@ -95,51 +91,51 @@ createARIPlotMat <- function(df, ariMat, metric="", model=""){
     dplyr::rename(ARI = value)
   ariCors <- df %>%
     group_by(name) %>%
-    group_modify(~as.data.frame(cor(.$preds, .$ARI)))
+    group_modify(~as.data.frame(cor(as.numeric(.$preds), as.numeric(.$ARI))))
   ariCors <- as.data.frame(ariCors)
+  colnames(ariCors)[[2]] <- "Cor"
   return(ariCors)
 }
 
-plotPredsARI <- function(df, ariMat, metric="", model="", npage=2){
+plotPredsARI <- function(df, ariMat, metric="", npage=2){
   df <- df %>%
     merge(ariMat, by=c("pipelines", "name"))%>%
     dplyr::rename(ARI = value)
-  print(sprintf("Predicted %s from %s", metric, model))
   ariCors <- df %>%
     group_by(name) %>%
-    group_modify(~as.data.frame(cor(.$preds, .$ARI)))
+    group_modify(~as.data.frame(cor(as.numeric(.$preds), as.numeric(.$ARI))))
   ariCors <- as.data.frame(ariCors)
+  colnames(ariCors)[[2]] <- "V1"
   for (i in 1:npage) {
-   p <- ggplot(df, aes(x=ARI, y=preds))+
+    p <- ggplot(df, aes(x=ARI, y=as.numeric(preds)))+
       geom_point(aes(colour=as.factor(res)))+
-      labs(colour = "Clustering\nresolution")+
       facet_wrap(~name, scales="free")+
+      labs(colour = "Clustering\nresolution")+
       xlab("Scaled ARI")+
-      facet_wrap_paginate(~name, scales="free", page=i, nrow=3, ncol=2)+
-      ylab(sprintf("Predicted %s from %s", metric, model))+
+      facet_wrap_paginate(~name, scales="free", page=i, nrow=4, ncol=2)+
+      ylab(sprintf("Predicted %s from LR", metric))+
       geom_text(
         data    = ariCors,
         mapping = aes(x = Inf, y = Inf, label = paste("Cor:", signif(V1, digits=3))),
         hjust   = 1.05,
         vjust   = 1.5
       )+ 
-     cowplot::theme_cowplot()+
-     theme(strip.background = element_rect(fill="white"),
-           strip.text = element_text(face="bold"))
-   print(p)
+      cowplot::theme_cowplot()+
+      theme(strip.background = element_rect(fill="white"),
+            strip.text = element_text(face="bold"))
+    print(p)
   }
   
 }
 
-plotPredActuals <- function(df, metric, model, R2labels,npage=1){
-  print(sprintf("Predicted %s from %s", metric, model))
+plotPredActuals <- function(df, metric, R2labels,npage=1){
   for (i in 1:npage){
     p <- ggplot(data=df, aes(x=as.numeric(Actual), y=as.numeric(preds)))+
       geom_point(aes(colour=as.factor(res)))+
-      labs(colour = "Clustering\nresolution")+
       facet_wrap_paginate(~name, scales="free", page=i, nrow=3, ncol=3)+
       xlab(sprintf("Ground truth %s", metric))+
-      ylab(sprintf("Predicted %s from %s", metric, model))+
+      ylab(sprintf("Predicted %s from LR", metric))+
+      labs(colour = "Clustering\nresolution")+
       geom_text(
         data    = R2labels,
         mapping = aes(x = Inf, y = Inf, label = paste("Cor:", signif(Cor, digits=3))),
@@ -184,12 +180,14 @@ gseaTrainDatasetCors <- datasetCors(gseaTrainPlot)
 testCors <- dplyr::bind_rows(list(sil=silTestDatasetCors, db=dbTestDatasetCors, ch=chTestDatasetCors, gsea=gseaTestDatasetCors), .id="metric")%>%
   mutate(metric = toupper(metric))
 
+
+
 testCors$metricf <- factor(testCors$metric, levels=c("CH", "DB", "SIL", "GSEA"))
-pdf("results/figures/randomForest/predMetricCorBar.pdf")
+pdf("results/figures/linearRegression/predMetricCorBarLR.pdf")
 ggplot(testCors, aes(x=tidytext::reorder_within(name, -Cor, metric), y=Cor))+
   geom_bar(stat="identity")+
   xlab("Dataset")+
-  ylab("Correlation between RF predictions and ground truth on test set")+
+  ylab("Correlation between LR predictions and ground truth on test set")+
   cowplot::theme_cowplot()+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=6))+
   tidytext::scale_x_reordered()+
@@ -198,28 +196,23 @@ ggplot(testCors, aes(x=tidytext::reorder_within(name, -Cor, metric), y=Cor))+
         strip.text = element_text(face="bold", size=20))
 dev.off()
 
-silParams = sprintf("RF (mtry=%s, ntree=%s)", silRF$mtry, silRF$ntree)
-dbParams = sprintf("RF (mtry=%s, ntree=%s)", dbRF$mtry, dbRF$ntree)
-chParams = sprintf("RF (mtry=%s, ntree=%s)", chRF$mtry, chRF$ntree)
-gseaParams = sprintf("RF (mtry=%s, ntree=%s)", gseaRF$mtry, gseaRF$ntree)
-
-filename <-"/home/campbell/cfang/automl_scrna/results/figures/RFPlots/RFPlots_NumericParams.pdf"
+filename <- sprintf("/home/campbell/cfang/automl_scrna/results/figures/LRPlots/LRPlots.pdf")
 pdf(filename)
 # Predicted vs Actual plots ###
-plotPredActuals(silTestPlot, metric="Sil (Test set)", model=silParams, silTestDatasetCors, npage=3)
-plotPredActuals(silTrainPlot, metric="Sil (Train set)", model=silParams, silTrainDatasetCors, npage=7)
-plotPredActuals(dbTestPlot, metric="DB (Test set)", model=dbParams, dbTestDatasetCors, npage=3)
-plotPredActuals(dbTrainPlot, metric="DB (Train set)", model=dbParams, dbTrainDatasetCors, npage=7)
-plotPredActuals(chTestPlot, metric="CH (Test set)", model=chParams, chTestDatasetCors,npage=3)
-plotPredActuals(chTrainPlot, metric="CH (Train set)", model=chParams, chTrainDatasetCors,npage=7)
-plotPredActuals(gseaTestPlot, metric="GSEA (Test set)", model=gseaParams, gseaTestDatasetCors,npage=3)
-plotPredActuals(gseaTrainPlot, metric="GSEA (Train set)", model=gseaParams, gseaTrainDatasetCors,npage=7)
+plotPredActuals(silTestPlot, metric="Sil (Test set)",  silTestDatasetCors, npage=3)
+plotPredActuals(silTrainPlot, metric="Sil (Train set)",  silTrainDatasetCors, npage=7)
+plotPredActuals(dbTestPlot, metric="DB (Test set)", dbTestDatasetCors, npage=3)
+plotPredActuals(dbTrainPlot, metric="DB (Train set)", dbTrainDatasetCors, npage=7)
+plotPredActuals(chTestPlot, metric="CH (Test set)",  chTestDatasetCors,npage=3)
+plotPredActuals(chTrainPlot, metric="CH (Train set)",  chTrainDatasetCors,npage=7)
+plotPredActuals(gseaTestPlot, metric="GSEA (Test set)", gseaTestDatasetCors,npage=3)
+plotPredActuals(gseaTrainPlot, metric="GSEA (Train set)",  gseaTrainDatasetCors,npage=7)
 
 ## Predicted vs ARI plots ###
-plotPredsARI(silTestPlot, ari_tbl, metric="Sil", model=silParams)
-plotPredsARI(dbTestPlot, ari_tbl, metric="DB", model=dbParams)
-plotPredsARI(chTestPlot, ari_tbl, metric="CH", model=chParams)
-plotPredsARI(gseaTestPlot, ari_tbl, metric="GSEA", model=gseaParams)
+plotPredsARI(silTestPlot, ari_tbl, metric="Sil")
+plotPredsARI(dbTestPlot, ari_tbl, metric="DB")
+plotPredsARI(chTestPlot, ari_tbl, metric="CH")
+plotPredsARI(gseaTestPlot, ari_tbl, metric="GSEA")
 
 dev.off()
 ### ColData ARI Correlation heatmap ###
@@ -238,22 +231,22 @@ gseaARI <- makeColdataDF(gseaARICor)
 
 silColdataARI <- silARI %>%
   group_by(dataType) %>%
-  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$V1))))
+  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$Cor))))
 colnames(silColdataARI)[[2]] <- "SIL"
 
 dbColdataARI <- dbARI %>%
   group_by(dataType) %>%
-  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$V1))))
+  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$Cor))))
 colnames(dbColdataARI)[[2]] <- "DB"
 
 chColdataARI <- chARI %>%
   group_by(dataType) %>%
-  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$V1))))
+  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$Cor))))
 colnames(chColdataARI)[[2]] <- "CH"
 
 gseaColdataARI <- gseaARI %>%
   group_by(dataType) %>%
-  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$V1))))
+  group_modify(~ as.data.frame(cor(as.numeric(.$value), as.numeric(.$Cor))))
 colnames(gseaColdataARI)[[2]] <- "GSEA"
 
 corHmARI <- merge(silColdataARI, dbColdataARI, by="dataType")
@@ -261,29 +254,28 @@ corHmARI <- merge(corHmARI, chColdataARI, by="dataType")
 corHmARI<- merge(corHmARI, gseaColdataARI, by="dataType")
 rownames(corHmARI) <- corHmARI$dataType
 corHmARI$dataType <- NULL
-col_ha <- rowAnnotation("Average" = anno_barplot(rowMeans(corHmARI)))
+col_ha <- rowAnnotation("Average"=anno_barplot(rowMeans(corHmARI)))
 
-ariHm <- ComplexHeatmap::Heatmap((as.matrix(corHmARI)), name="Correlation of\ndataset feature\nwith dataset-specific\npredictive performance\n(ARI)", left_annotation = col_ha, cluster_columns = FALSE)
+ariHm <- ComplexHeatmap::Heatmap((as.matrix(corHmARI)), name="Correlation of\ndataset features\nwith dataset-specific\npredictive performance\n(ARI)", left_annotation = col_ha, cluster_columns = FALSE)
 
 ### ColData ARI Cor boxplot ###
-wilcoxLabelsARI <- c(wilcox.test(chARICor$V1, alternative="greater")$p.value,
-                     wilcox.test(dbARICor$V1, alternative="greater")$p.value,
-                     wilcox.test(gseaARICor$V1, alternative="greater")$p.value,
-                     wilcox.test(silARICor$V1, alternative="greater")$p.value )
+wilcoxLabelsARI <- c(wilcox.test(chARICor$Cor, alternative="greater")$p.value,
+                     wilcox.test(dbARICor$Cor, alternative="greater")$p.value,
+                     wilcox.test(gseaARICor$Cor, alternative="greater")$p.value,
+                     wilcox.test(silARICor$Cor, alternative="greater")$p.value )
 wilcoxLabelsARI <- as.data.frame(wilcoxLabelsARI)
 wilcoxLabelsARI <- cbind(wilcoxLabelsARI, metric=c("CH","DB","GSEA","SIL"))
 allARIdf <- mutate(allARIdf, metric=toupper(metric))
 
+pdf("results/figures/linearRegression/predictionsARICorBoxplotLR.pdf", width=5.25, height=6)
 allARIdf$metricf <- factor(allARIdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
-
-pdf("results/figures/randomForest/predictionsARICorBoxplot.pdf", width=5, height=5.85)
-ggplot(allARIdf, aes(x=metricf, y=V1, fill=metric))+
+ggplot(as.data.frame(allARIdf), aes(x=metricf, y=Cor, fill=metric))+
   geom_boxplot()+
   xlab("Metric")+
-  ylab("Correlation of RF predictions with ARI")+
+  ylab("Correlation of LR predictions with ARI")+
   geom_text(
     data    = wilcoxLabelsARI,
-    mapping = aes(x = metric, y = Inf, label=paste("p =", signif(wilcoxLabelsARI,3))),
+    mapping = aes(x = metric, y = Inf, label= paste("p =", signif(wilcoxLabelsARI,3))),
     hjust   = 0.65,
     vjust   = 1.5,
     color = "black",
@@ -295,20 +287,21 @@ ggplot(allARIdf, aes(x=metricf, y=V1, fill=metric))+
         legend.position = "none")
 dev.off()
 
-pdf("results/figures/randomForest/ariCorBar.pdf")
-ggplot(allARIdf, aes(x=tidytext::reorder_within(name, -V1, metric), y=V1))+
+pdf("results/figures/linearRegression/ariCorBarLR.pdf")
+allARIdf$metricf <- factor(allARIdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
+ggplot(allARIdf, aes(x=tidytext::reorder_within(name, -Cor, metric), y=Cor))+
   geom_bar(stat="identity")+
   facet_wrap(~metric, scale="free")+
   xlab("Dataset")+
-  ylab("Correlation between RF predictions and ARI on test set")+
+  ylab("Correlation between LR predictions and ARI on test set")+
   cowplot::theme_cowplot()+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=6))+
   tidytext::scale_x_reordered()+
   facet_wrap(~ metricf, scale="free_x")+
   theme(strip.background = element_rect(fill="white"),
         strip.text = element_text(face="bold", size=20))
-dev.off()
 
+dev.off()
 ### ColData Correlation Heatmap ###
 silCol <- makeColdataDF(silTestDatasetCors)
 dbCol <- makeColdataDF(dbTestDatasetCors)
@@ -316,6 +309,8 @@ chCol <- makeColdataDF(chTestDatasetCors)
 gseaCol <- makeColdataDF(gseaTestDatasetCors)
 
 alldf <- dplyr::bind_rows(list(sil=silCol, db=dbCol, ch=chCol, gsea=gseaCol), .id = 'metric')
+alldf <- alldf #%>%
+#mutate(xLabel = paste(metric, PredPower, sep=" "))
 
 silColdataCor <- silCol %>%
   group_by(dataType) %>%
@@ -346,10 +341,12 @@ col_ha <- rowAnnotation("Average" = anno_barplot(rowMeans(corHmDf)))
 
 corHm <- ComplexHeatmap::Heatmap((as.matrix(corHmDf)), name="Correlation of\ndataset features\nwith dataset-specific\npredictive performance", left_annotation = col_ha,cluster_columns = FALSE)
 
-ht_opt$heatmap_row_names_gp = gpar(fontsize = 16)
+#ht_list <- corHm %v% ariHm
+
+ht_opt$heatmap_row_names_gp = gpar(fontsize = 14)
 ht_opt$heatmap_column_names_gp = gpar(fontsize = 16)
 
-pdf("results/figures/randomForest/datasetFeaturePerformanceHeatmaps.pdf")
+pdf("results/figures/linearRegression/datasetFeaturePerformanceHeatmapsLR.pdf")
 draw(corHm,
      row_title="Feature", 
      column_title="Metric", 
@@ -381,15 +378,16 @@ corbpdf$metric <- sub("^Cor", "", corbpdf$metric)
 corbpdf <- corbpdf %>%
   mutate(metric=toupper(metric))
 
-pdf("results/figures/randomForest/predictionMetricCorBoxplot.pdf", width=6.25, height=6.1)
 corbpdf$metricf <- factor(corbpdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
+
+pdf("results/figures/linearRegression/predictionMetricCorBoxplotLR.pdf", width=6.25, height=6.1)
 ggplot(corbpdf, aes(x=metricf, y=value, fill=metric))+
   geom_boxplot()+
   xlab("Metric")+
-  ylab("Correlation of RF predictions\nwith corrected observed metric")+
+  ylab("Correlation of LR predictions\nwith corrected observed metric")+
   geom_text(
     data    = wilcoxLabels,
-    mapping = aes(x = metric, y = Inf, label=paste("p =",signif(wilcoxLabels,3))),
+    mapping = aes(x = metric, y = Inf, label=paste("p =", signif(wilcoxLabels,3))),
     hjust   = 0.65,
     vjust   = 1.5,
     color = "black",
