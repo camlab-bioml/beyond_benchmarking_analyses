@@ -26,17 +26,10 @@ silModel <- readRDS(args[[3]])$finalModel
 dbModel <- readRDS(args[[4]])$finalModel
 chModel <- readRDS(args[[5]])$finalModel
 gseaModel <- readRDS(args[[6]])$finalModel
+#modelType <- args[[7]]
 
-if(!grepl("pipelinesOnly", args[[3]])){
-  modelType <- args[[7]]
-  pipelinesOnly <- FALSE
-}else{
-  pipelinesOnly <- TRUE
-}
-
-print(pipelinesOnly)
 print(args)
-
+pipelineFeats <- c("filt", "norm", "res", "dims")
 
 predRF <- function(trainData, testData, trainScores, testScores, tunedRF){
   # Save name and pipeline values but don't include in model
@@ -52,8 +45,13 @@ predRF <- function(trainData, testData, trainScores, testScores, tunedRF){
   
   # Predict on train and test sets
   print(names(testData))
+  testData <- testData[,pipelineFeats]
+  print(head(testData))
   preds <- predict(tunedRF, newdata=testData)
   testRsq <- R2(preds, as.numeric(testScores))
+  
+  trainData <- trainData[,pipelineFeats]
+  print(head(trainData))
   trainPreds <- predict(tunedRF, newdata=trainData)
   trainRsq <- R2(trainPreds, as.numeric(trainScores))
   
@@ -66,17 +64,10 @@ predRF <- function(trainData, testData, trainScores, testScores, tunedRF){
 }
 
 
+
+
 trainMat <- designMatTrain$data
 testMat <- designMatTest$data
-
-pipelineFeats <- c("name", "pipelines", "filt", "norm", "res", "dims")
-
-if(pipelinesOnly){
-  trainMat <- trainMat[,pipelineFeats]
-  testMat <- testMat[,pipelineFeats]
-}
-print(head(trainMat))
-print(head(testMat))
 
 print("sil")
 silRF <- predRF(trainMat, testMat, designMatTrain$labels$silCorImp, designMatTest$labels$silCorImp, silModel)
@@ -89,9 +80,5 @@ gseaRF <- predRF(trainMat, testMat, designMatTrain$labels$gseaScaledImp, designM
 
 
 models <- list(sil=silRF, db=dbRF, ch=chRF, gsea=gseaRF)
-if(grepl("pipelinesOnly", args[[3]])){
-  fileName <- "/home/campbell/cfang/automl_scrna/results/models/randomForest/pipelinesOnly/pipelinesOnlyRFPreds_Params.RDS"
-}else{
-  fileName <- sprintf("/home/campbell/cfang/automl_scrna/results/models/randomForest/RFPreds_%sParams.RDS", modelType)
-}
-saveRDS(models, fileName)
+saveRDS(models, sprintf("/home/campbell/cfang/automl_scrna/results/models/randomForest/pipelinesOnlyRFPreds.RDS"))
+

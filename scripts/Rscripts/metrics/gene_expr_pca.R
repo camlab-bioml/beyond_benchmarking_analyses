@@ -40,10 +40,18 @@ testMeans <- t(testMeans)
 print(dim(trainMeans))
 print(dim(testMeans))
 
-ppcaTrain <- ppca(as.matrix(trainMeans), nPcs=20)
-ppcaTest <- predict(ppcaTrain, newdata = as.matrix(testMeans))
+trainMeans[is.na(trainMeans)] <- 0
+testMeans[is.na(testMeans)] <- 0
 
-trainExprScores <- ppcaTrain@scores
-testExprScores <- ppcaTest$scores
+print(any(is.na(trainMeans)))
+print(any(is.na(testMeans)))
 
+pcaTrain <- pca(as.matrix(trainMeans), nPcs=20, seed=123)
+print(pcaTrain)
+pcaTest <- predict(pcaTrain, newdata = as.matrix(testMeans))
+
+trainExprScores <- pcaTrain@scores
+testExprScores <- pcaTest$scores
+
+saveRDS(pcaTrain, "/home/campbell/cfang/automl_scrna/results/gene_expr_pca_model.RDS")
 saveRDS(list(trainExpr=trainExprScores, testExpr=testExprScores), "/home/campbell/cfang/automl_scrna/data/avg_expr_pca.RDS")

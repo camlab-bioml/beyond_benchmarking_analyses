@@ -8,7 +8,25 @@ from scipy.sparse import csr_matrix
 
 
 def compute_metrics(sce_path, clusters_path):
-    adata = sc.read_h5ad(sce_path)
+    try:
+        adata = sc.read_h5ad(sce_path)
+    except:
+        cluster_values = []
+        with open(clusters_path, newline="") as csv_file:
+            reader = csv.reader(csv_file, delimiter=" ", quotechar="|")
+            for row in reader: # for some reason can't open the csv file?
+                row = row[0].split(",")
+                cluster_values.append(row[1])
+        pipeline_name = cluster_values[0]
+        print(pipeline_name)
+        silhouette = None
+        ch_index = None
+        db_index = None
+        print("Encountered NA clusters.")
+        clust_metrics = {"pipeline": pipeline_name, "silhouette":
+            silhouette, "ch_index": ch_index,
+                         "db_index": db_index}
+        return clust_metrics
     try:
         x = adata.layers["logcounts"].toarray()
     except:
@@ -40,13 +58,8 @@ def compute_metrics(sce_path, clusters_path):
     return clust_metrics
 
 
-def save_metrics(clustering_metrics, sce_path):
-    csv_name = sce_path.split("/")[-1]
-    csv_name = csv_name.split(".h5ad")[0]
-    print(csv_name)
-    csv_name = "/home/campbell/cfang/automl_scrna/results/metrics/" + \
-               sce_path.split("/")[-2] + "/metrics-"+ sce_path.split("/")[-2] + "-" + csv_name + ".csv"
-    print(csv_name)
+def save_metrics(clustering_metrics, csv_name):
+
     with open(csv_name, "w") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=clustering_metrics.keys())
         clustering_metrics = [clustering_metrics]
@@ -59,5 +72,15 @@ if __name__ == '__main__':
     parser.add_argument("--sce", action="store", type=str)
     parser.add_argument("--clust", action="store", type=str)
     args = parser.parse_args()
+    sce_path = args.sce
+    csv_name = sce_path.split("/")[-1]
+    csv_name = csv_name.split(".h5ad")[0]
+    sce_name = sce_path.split("/")[-3]
+    print(csv_name)
+    downsampleType = sce_path.split("/")[-2]
+    csv_name = "/home/campbell/cfang/automl_scrna/results/metrics/" + \
+               sce_name + "/" + downsampleType + "/metrics-" + \
+               sce_name + "-" + csv_name + ".csv"
+    print(csv_name)
     clust_metrics = compute_metrics(args.sce, args.clust)
-    save_metrics(clust_metrics, args.sce)
+    save_metrics(clust_metrics, csv_name)

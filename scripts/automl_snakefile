@@ -4,19 +4,32 @@ import yaml
 with open(r"scripts/config_files/experiments.yaml") as file:
     exps = yaml.load(file, Loader=yaml.FullLoader)
 exps = exps.get("Experiments")
+
 with open(r"scripts/config_files/labelled_exps.yaml") as file:
     labelled_exps = yaml.load(file, Loader=yaml.FullLoader)
 labelled_exps = labelled_exps.get("Labelled_Experiments")
+
+with open(r"scripts/config_files/experimentsSampled.yaml") as file:
+    sampExps = yaml.load(file, Loader=yaml.FullLoader)
+sampExps = sampExps.get("SampledExperiments")
+
+with open(r"scripts/config_files/downsampleTypes.yaml") as file:
+    downSampleTypes = yaml.load(file, Loader=yaml.FullLoader)
+downsampleTypes = downSampleTypes.get("SamplingTypes")
+
 combo_names = [str(x) for x in range(1,325)]
 metrics = ["sil", "db", "ch", "gsea"]
 RFTypes = ["Numeric"]
+modelFeaturesType = ["pipelinesOnly", "allTermsInteractions"]
 wildcard_constraints:
     sample = "|".join(exps),
     combo_name = "|".join(combo_names),
     labelled_sample = "|".join(labelled_exps),
     metrics = "|".join(metrics),
-    RFTypes = "|".join(RFTypes)
-
+    RFTypes = "|".join(RFTypes),
+    sampExps = "|".join(sampExps),
+    downsampleTypes = "|".join(downsampleTypes)
+print(downsampleTypes)
 rule all:
     input:
         expand("data/experiments/{sample}/{sample}-SCE.RDS", sample=exps),
@@ -72,8 +85,30 @@ rule all:
         "results/paperData/dbCorrectedImputed.csv",
         "results/paperData/chCorrectedImputed.csv",
         "results/paperData/gseaScaledImputed.csv",
+        "results/paperData/gsea_unscaled.csv",
         "results/figures/randomForest/RFTuning.pdf",
-        "results/figures/linearRegression/LRTuning.pdf"
+        "results/figures/linearRegression/LRTuning.pdf",
+        "results/models/linearRegression/allTermsInteractions/LR_int_allTerms.RDS",
+        "results/models/linearRegression/pipelinesOnly/LR_pipelinesOnly.RDS",
+        expand("results/tuneRF/pipelinesOnly/RF{metric}_pipelinesOnly.RDS", metric=metrics),
+        "results/models/randomForest/pipelinesOnly/pipelinesOnlyRFPreds_Params.RDS",
+        "results/figures/linearRegression/LRinteractions/LR_int_allTerms_plots.pdf",
+        "results/figures/linearRegression/pipelinesOnly/LR_pipelinesOnly_plots.pdf",
+        "results/figures/randomForest/pipelinesOnly/RFpipelinesOnly_plots.pdf",
+        f"results/figures/randomForest/allTermsInteractions/RFAllTermsInteractionsPlots.pdf",
+        expand("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/paperData/clusters/{sample}/{sample}-101.csv", sample=exps),
+        expand("results/pipecomp_outputs/paperData/clusters/zipped/{sample}.zip", sample=exps),
+        expand("data/experiments/downsampledExperiments/{sample}/{sample}-SCE-50.RDS", sample=exps),
+        expand("data/experiments/downsampledExperiments/{sample}/{sample}-SCE-75.RDS", sample=exps),
+        expand("data/experiments/downsampledExperiments/{sample}/{sample}-SCE-downsampleCounts-50.RDS", sample=exps),
+        #expand("results/pipecomp_outputs/{sample}/{sampExps}res.dataset1.endOutputs.rds", sample=exps, sampExps=sampExps),
+        expand("results/pipecomp_outputs/{sample}/{sample}-{downsampleTypes}.RDSres.dataset1.endOutputs.rds", sample=exps, downsampleTypes=downsampleTypes),
+        expand("results/pipecomp_outputs/clusters/{sample}/{downsampleTypes}/{combo_name}.csv", sample=exps, combo_name=combo_names, downsampleTypes=downsampleTypes),
+        expand("results/pipecomp_outputs/H5AD_files/{sample}/{downsampleTypes}/{combo_name}.h5ad", sample=exps, downsampleTypes = downsampleTypes, combo_name=combo_names),
+        expand("results/metrics/{sample}/{downsampleTypes}/metrics-{sample}-{combo_name}.csv", sample=exps, downsampleTypes = downsampleTypes, combo_name=combo_names),
+        expand("results/pipecomp_outputs/labelled_clusters/{labelled_sample}/{downsampleTypes}/{combo_name}-labelled.csv", combo_name=combo_names, labelled_sample=labelled_exps, downsampleTypes=downsampleTypes),
+        expand("results/supervised_metrics/{labelled_sample}/{downsampleTypes}/{combo_name}.csv", labelled_sample = labelled_exps, downsampleTypes=downsampleTypes, combo_name=combo_names),
+        expand("data/experiments/colData-{downsampleTypes}.RDS", downsampleTypes=downsampleTypes)
 rule create_sce:
     input:
         f"data/experiments/{{sample}}"
@@ -99,10 +134,10 @@ rule run_pipeline:
         "Rscript scripts/Rscripts/clustering/run_pipecomp.R {input[0]} {input[1]}"
 rule split_clusters:
     input:
-        f"results/pipecomp_outputs/{{all_sample}}/{{all_sample}}res.dataset1.endOutputs.rds"
+        f"results/pipecomp_outputs/{{sample}}/{{sample}}res.dataset1.endOutputs.rds"
     output:
-        expand("results/pipecomp_outputs/clusters/{{all_sample}}/{combo_name}.csv", combo_name=combo_names),
-        expand("results/pipecomp_outputs/H5AD_files/{{all_sample}}/{combo_name}.h5ad", combo_name=combo_names)
+        expand("results/pipecomp_outputs/clusters/{{sample}}/{combo_name}.csv", combo_name=combo_names),
+        expand("results/pipecomp_outputs/H5AD_files/{{sample}}/{combo_name}.h5ad", combo_name=combo_names)
     container:
         "../pipecomp-singularity.sif"
     resources:
@@ -120,7 +155,7 @@ rule compute_metrics:
     resources:
         mem_mb=50000
     shell:
-        "python3 ../scripts/python_scripts/metrics.py --sce {input[0]} --clust {input[1]}"
+        "python3 scripts/python_scripts/metrics.py --sce {input[0]} --clust {input[1]}"
 rule make_metrics_matrices:
     input:
         expand("results/metrics/{{sample}}/metrics-{{sample}}-{combo_name}.csv",combo_name=combo_names)
@@ -273,6 +308,8 @@ rule gene_expression_pca:
         f"data/avg_expr_pca.RDS"
     container:
         "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=50000
     shell:
         "Rscript scripts/Rscripts/metrics/gene_expr_pca.R {input}"
 rule clean_RF_data:
@@ -338,16 +375,11 @@ rule plot_RF_results:
         f"data/corrected_designMat_unscaled.RDS",
         f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
     output:
-        f"results/figures/RFPlots/RFPlots_NumericParams.pdf",
-        "results/figures/randomForest/datasetFeaturePerformanceHeatmaps.pdf",
-        "results/figures/randomForest/predictionMetricCorBoxplot.pdf",
-        "results/figures/randomForest/predMetricCorBar.pdf",
-        "results/figures/randomForest/predictionsARICorBoxplot.pdf",
-        "results/figures/randomForest/ariCorBar.pdf"
+        f"results/figures/randomForest/allTermsInteractions/RFAllTermsInteractionsPlots.pdf"
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/plotting/plotRFResults.R {input}"
+        "Rscript scripts/Rscripts/randomForest/pipelinesOnlyPlotRFResults.R {input} {output}"
 rule linear_regression:
     input:
         f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
@@ -414,7 +446,9 @@ rule save_paper_data:
         "results/metrics/sil_unscaled.csv",
         "results/metrics/db_unscaled.csv",
         "results/metrics/ch_unscaled.csv",
-        f"data/corrected_designMat_unscaled.RDS"
+        "results/gsea_results/all_gsea_means.csv",
+        f"data/corrected_designMat_unscaled.RDS",
+        f"data/avg_expr_pca.RDS"
     output:
         "results/paperData/pipelineParams.csv",
         "results/paperData/datasetFeatures.csv",
@@ -424,7 +458,9 @@ rule save_paper_data:
         "results/paperData/gseaScaledImputed.csv",
         "results/paperData/sil_unscaled.csv",
         "results/paperData/db_unscaled.csv",
-        "results/paperData/ch_unscaled.csv"
+        "results/paperData/ch_unscaled.csv",
+        "results/paperData/gsea_unscaled.csv",
+
     container:
         "../pipecomp-singularity.sif"
     shell:
@@ -440,3 +476,182 @@ rule plot_models_tuning:
         "../pipecomp-singularity.sif"
     shell:
         "Rscript scripts/Rscripts/plotting/plotModelsTuning.R {input}"
+rule linear_regression_interactions:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled.RDS"
+    output:
+        "results/models/linearRegression/allTermsInteractions/LR_int_allTerms.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/LR-int.R {input}"
+rule linear_regression_pipelines_only:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled.RDS"
+    output:
+        "results/models/linearRegression/pipelinesOnly/LR_pipelinesOnly.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/LRpipelinesOnly.R {input}"
+rule plot_lr_interactions:
+    input:
+        "results/models/linearRegression/allTermsInteractions/LR_int_allTerms.RDS",
+        f"data/corrected_designMat_unscaled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+    output:
+        f"results/figures/linearRegression/LRinteractions/LR_int_allTerms_plots.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/plotLRResults.R {input} {output}"
+rule plot_lr_pipelines_only:
+    input:
+        "results/models/linearRegression/pipelinesOnly/LR_pipelinesOnly.RDS",
+        f"data/corrected_designMat_unscaled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+    output:
+        f"results/figures/linearRegression/pipelinesOnly/LR_pipelinesOnly_plots.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/plotLRResults.R {input} {output}"
+
+rule RF_pipelines_only:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled.RDS"
+    output:
+        f"results/tuneRF/pipelinesOnly/RF{{metric}}_pipelinesOnly.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/randomForest/pipelinesOnlyTuneRF.R {input} {wildcards.metric}"
+rule predict_from_tuned_RF_pipelines_only:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled.RDS",
+        expand("results/tuneRF/pipelinesOnly/RF{metric}_pipelinesOnly.RDS", metric=metrics)
+    output:
+        f"results/models/randomForest/pipelinesOnly/pipelinesOnlyRFPreds_Params.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/randomForest/RFPredictFromTuned.R {input}"
+
+rule plot_rf_pipelines_only:
+    input:
+        f"results/models/randomForest/pipelinesOnly/pipelinesOnlyRFPreds_Params.RDS",
+        f"data/corrected_designMat_unscaled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+    output:
+        "results/figures/randomForest/{modelFeaturesType}/RF{modelFeaturesType}_plots.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/randomForest/pipelinesOnlyPlotRFResults.R {input} {output}"
+rule downsample_sce:
+    input:
+        f"data/experiments/{{sample}}/{{sample}}-SCE.RDS"
+    output:
+        f"data/experiments/downsampledExperiments/{{sample}}/{{sample}}-SCE-50.RDS",
+        f"data/experiments/downsampledExperiments/{{sample}}/{{sample}}-SCE-75.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/clustering/downsampleSCECells.R {input} {output}"
+rule downsample_sce_counts:
+    input:
+        f"data/experiments/{{sample}}/{{sample}}-SCE.RDS"
+    output:
+        f"data/experiments/downsampledExperiments/{{sample}}/{{sample}}-SCE-downsampleCounts-50.RDS",
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/clustering/downsampleSCECounts.R {input} {output}"
+
+rule run_pipecomp_on_downsampled_sces:
+    input:
+        f"scripts/config_files/alternatives.yaml",
+        f"data/experiments/downsampledExperiments/{{sample}}/{{sample}}-{{downsampleTypes}}.RDS",
+    output:
+        f"results/pipecomp_outputs/{{sample}}/{{sample}}-{{downsampleTypes}}.RDSres.dataset1.endOutputs.rds",
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+         mem_mb=128900
+    shell:
+        "Rscript scripts/Rscripts/clustering/run_pipecomp_downsample.R {input} {output}"
+rule split_clusters_downsampled:
+    input:
+        f"results/pipecomp_outputs/{{sample}}/{{sample}}-{{downsampleTypes}}.RDSres.dataset1.endOutputs.rds",
+        f"data/experiments/downsampledExperiments/{{sample}}/{{sample}}-{{downsampleTypes}}.RDS"
+    output:
+        expand("results/pipecomp_outputs/clusters/{{sample}}/{{downsampleTypes}}/{combo_name}.csv", combo_name=combo_names),
+        expand("results/pipecomp_outputs/H5AD_files/{{sample}}/{{downsampleTypes}}/{combo_name}.h5ad", combo_name=combo_names)
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=128900
+    shell:
+        "Rscript scripts/Rscripts/clustering/split_clusters_downsample.R {input} {wildcards.downsampleTypes}"
+rule compute_metrics_downsampled:
+    input:
+        f"results/pipecomp_outputs/H5AD_files/{{sample}}/{{downsampleTypes}}/{{combo_name}}.h5ad",
+        f"results/pipecomp_outputs/clusters/{{sample}}/{{downsampleTypes}}/{{combo_name}}.csv"
+    output:
+        f"results/metrics/{{sample}}/{{downsampleTypes}}/metrics-{{sample}}-{{combo_name}}.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=50000
+    shell:
+        "python3 scripts/python_scripts/metrics_downsampled.py --sce {input[0]} --clust {input[1]}"
+rule merge_labels_with_clusters_downsampled:
+    input:
+        f"data/labelled_experiments/{{labelled_sample}}/ExpDesign-labels-{{labelled_sample}}.tsv",
+        expand("results/pipecomp_outputs/clusters/{{labelled_sample}}/{{downsampleTypes}}/{combo_name}.csv", combo_name=combo_names)
+    output:
+        expand("results/pipecomp_outputs/labelled_clusters/{{labelled_sample}}/{{downsampleTypes}}/{combo_name}-labelled.csv", combo_name=combo_names)
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/supervised_metrics_clusts_downsample.R {input} {wildcards.downsampleTypes}"
+rule compute_supervised_metrics_downsampled:
+    input:
+        f"results/pipecomp_outputs/labelled_clusters/{{labelled_sample}}/{{downsampleTypes}}/{{combo_name}}-labelled.csv"
+    output:
+        f"results/supervised_metrics/{{labelled_sample}}/{{downsampleTypes}}/{{combo_name}}.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=30000
+    shell:
+        "python3 scripts/python_scripts/supervised_metrics_downsampled.py --clust {input[0]}"
+rule extract_colData_downsample:
+    input:
+        expand("data/experiments/downsampledExperiments/{sample}/{sample}-{{downsampleTypes}}.RDS", sample=exps)
+    output:
+        f"data/experiments/colData-{{downsampleTypes}}.RDS",
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=150000
+    shell:
+        "Rscript scripts/Rscripts/metrics/extract_colData_downsample.R {wildcards.downsampleTypes} {output} {input} "
+
+rule save_clusters:
+    output:
+        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/paperData/clusters/{{sample}}/{{sample}}-101.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/saveClusters.R {wildcards.sample}"
+rule zip_clusters:
+    output:
+        f"results/pipecomp_outputs/paperData/clusters/zipped/{{sample}}.zip"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "zip -r results/pipecomp_outputs/paperData/clusters/zipped/{wildcards.sample}.zip results/pipecomp_outputs/paperData/clusters/{wildcards.sample}/"
