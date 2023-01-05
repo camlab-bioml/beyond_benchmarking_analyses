@@ -13,15 +13,17 @@ suppressPackageStartupMessages({
 })
 args <- commandArgs(trailingOnly = TRUE)
 exps <- args[-c(1,2)]
-downsampleType <- args[[1]]
-outputFile <- args[[2]]
+downsampleType <- args[[2]]
+outputFile <- args[[1]]
 
 allColdata <- c()
 expNames <- c()
 
 for (i in 1:length(exps)){
   exp <- exps[[i]]
+  print(exp)
   exp.name <- strsplit(exp, split="/")[[1]][[4]]
+  print(exp.name)
   expNames <- c(expNames, exp.name)
   sce <- readRDS(exp)
   cd <- colData(sce)
@@ -36,15 +38,16 @@ for (i in 1:length(exps)){
   
   cd <- c(cd, ncells=dim(sce)[[2]])
   cd <- c(cd, ngenes=dim(sce)[[1]])
+  print(cd)
   allColdata[[i]] <- data.frame(cd)
   names(allColdata)[[i]] <- exp.name
 }
-
+print(allColdata)
 allColdata <- do.call(cbind, allColdata)
-colnames(allColdata) <- expNames
+colnames(allColdata) <- paste(expNames, downsampleType, sep="-")
 out.name <- strsplit(exp, split=exp.name)[[1]][[1]]
 allColdata <- t(allColdata)
-allColdata <- cbind(X=expNames, allColdata)
+allColdata <- as.data.frame(cbind(X=expNames, allColdata))
 allColdata$downsampleType <- downsampleType
 print(allColdata)
 saveRDS(allColdata, outputFile)

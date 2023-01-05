@@ -9,6 +9,7 @@ from scipy.sparse import csr_matrix
 
 def compute_metrics(clust_path):
     clust_labels = pd.read_csv(clust_path)
+    print(clust_labels)
     clusts = clust_labels.iloc[:,2]
     labels = clust_labels["true_labels"]
     print(clusts)
@@ -19,7 +20,9 @@ def compute_metrics(clust_path):
     cs = metrics.completeness_score(labels, clusts)
     vm = metrics.v_measure_score(labels, clusts)
     fm = metrics.fowlkes_mallows_score(labels, clusts)
-    scores = {"ARI": ari, "mutual_info": mi, "homogeneity" : hs, "completeness" : cs, "vmeasure" : vm, "FM" : fm, "run": clust_labels.columns[2]}
+    run = clust_labels.columns[2]
+    print(run)
+    scores = {"ARI": ari, "mutual_info": mi, "homogeneity" : hs, "completeness" : cs, "vmeasure" : vm, "FM" : fm, "run": run}
     return scores
 
 def save_metrics(clustering_metrics, clust_path):

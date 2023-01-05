@@ -17,7 +17,8 @@ def compute_metrics(sce_path, clusters_path):
             for row in reader: # for some reason can't open the csv file?
                 row = row[0].split(",")
                 cluster_values.append(row[1])
-        pipeline_name = cluster_values[0]
+        print(cluster_values)
+        pipeline_name = cluster_values[1]
         print(pipeline_name)
         silhouette = None
         ch_index = None

@@ -108,7 +108,19 @@ rule all:
         expand("results/metrics/{sample}/{downsampleTypes}/metrics-{sample}-{combo_name}.csv", sample=exps, downsampleTypes = downsampleTypes, combo_name=combo_names),
         expand("results/pipecomp_outputs/labelled_clusters/{labelled_sample}/{downsampleTypes}/{combo_name}-labelled.csv", combo_name=combo_names, labelled_sample=labelled_exps, downsampleTypes=downsampleTypes),
         expand("results/supervised_metrics/{labelled_sample}/{downsampleTypes}/{combo_name}.csv", labelled_sample = labelled_exps, downsampleTypes=downsampleTypes, combo_name=combo_names),
-        expand("data/experiments/colData-{downsampleTypes}.RDS", downsampleTypes=downsampleTypes)
+        expand("data/experiments/colData-{downsampleTypes}.RDS", downsampleTypes=downsampleTypes),
+        expand("results/gsea_results/downsampledExperiments/{sample}-{downsampleTypes}-{combo_name}-gsea.csv", sample=exps, downsampleTypes=downsampleTypes, combo_name=combo_names),
+        expand("results/gsea_results/gsea_matrices/{sample}-{downsampleTypes}-gsea.csv", sample=exps, downsampleTypes=downsampleTypes),
+        expand("results/supervised_metrics/metrics_matrices/{labelled_sample}-{downsampleTypes}-supervised.csv", labelled_sample=labelled_exps, downsampleTypes = downsampleTypes),
+        expand("results/supervised_metrics/metrics_matrices/{labelled_sample}-{downsampleTypes}-supervised.csv", labelled_sample=labelled_exps, downsampleTypes = downsampleTypes),
+        f"results/gsea_results/all_gsea_means_downsample.csv",
+        expand("results/metrics/{metric}_unscaled_downsample.csv", metric=["sil", "db", "ch"]),
+        f"results/metrics/all_metrics_downsample.RDS",
+        f"data/uncorrected_designMatrix_scaled_all_exps_and_downsampled.RDS",
+        expand("results/supervised_metrics/{sup_metric}_unscaled_with_downsampled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"]),
+        f"data/avg_expr_pca_downsampled.RDS",
+        f"data/train_test_split_downsampled.RDS",
+        "results/pipecomp_outputs/num_clusters_downsampled.csv"
 rule create_sce:
     input:
         f"data/experiments/{{sample}}"
@@ -605,7 +617,7 @@ rule compute_metrics_downsampled:
     container:
         "../pipecomp-singularity.sif"
     resources:
-        mem_mb=50000
+        mem_mb=10000
     shell:
         "python3 scripts/python_scripts/metrics_downsampled.py --sce {input[0]} --clust {input[1]}"
 rule merge_labels_with_clusters_downsampled:
@@ -639,19 +651,155 @@ rule extract_colData_downsample:
     resources:
         mem_mb=150000
     shell:
-        "Rscript scripts/Rscripts/metrics/extract_colData_downsample.R {wildcards.downsampleTypes} {output} {input} "
+        "Rscript scripts/Rscripts/metrics/extract_colData_downsample.R {output} {wildcards.downsampleTypes} {input}"
+rule compute_gsea_split_downsample:
+    input:
+        f"data/experiments/downsampledExperiments/{{sample}}/{{sample}}-{{downsampleTypes}}.RDS",
+        f"results/pipecomp_outputs/{{sample}}/{{sample}}-{{downsampleTypes}}.RDSres.dataset1.endOutputs.rds"
+    output:
+        f"results/gsea_results/downsampledExperiments/{{sample}}-{{downsampleTypes}}-{{combo_name}}-gsea.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+         mem_mb=150000
+    shell:
+        "Rscript scripts/Rscripts/metrics/gsea/run_gsea_split_downsample.R {input} {output} {wildcards.combo_name}"
+rule make_supervised_matrices_downsample:
+    input:
+        expand("results/supervised_metrics/{{labelled_sample}}/{{downsampleTypes}}/{combo_name}.csv", combo_name=combo_names)
+    output:
+        f"results/supervised_metrics/metrics_matrices/{{labelled_sample}}/{{labelled_sample}}-{{downsampleTypes}}-supervised.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/make_supervised_matrices_downsampled.R {output} {input}"
+rule aggregate_super_metrics_downsample:
+    input:
+        expand("results/supervised_metrics/metrics_matrices/{labelled_sample}/{labelled_sample}-{downsampleTypes}-supervised.csv", labelled_sample=labelled_exps, downsampleTypes=downsampleTypes)
+    output:
+        expand("results/supervised_metrics/{sup_metric}_unscaled_with_downsampled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"])
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/aggregate_super_metrics_downsampled.R {input}"
+rule make_gsea_matrices_downsample:
+    input:
+        expand("results/gsea_results/downsampledExperiments/{{sample}}-{{downsampleTypes}}-{combo_name}-gsea.csv", combo_name=combo_names),
+        f"results/pipecomp_outputs/{{sample}}/{{sample}}-{{downsampleTypes}}.RDSres.dataset1.endOutputs.rds"
+    output:
+        f"results/gsea_results/gsea_matrices/{{sample}}-{{downsampleTypes}}-gsea.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/gsea/make_gsea_matrices_downsample.R {output} {input}"
+rule average_gsea_downsample:
+    input:
+        f"results/gsea_results/gsea_matrices/{{sample}}-{{downsampleTypes}}-gsea.csv"
+    output:
+        f"results/gsea_results/gsea_matrices/{{sample}}-{{downsampleTypes}}-gsea-averaged.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/gsea/average_gsea_downsample.R {output} {input}"
+rule aggregate_gsea_means_downsample:
+    input:
+        expand("results/gsea_results/gsea_matrices/{sample}-{downsampleTypes}-gsea-averaged.csv", sample=exps, downsampleTypes=downsampleTypes)
+    output:
+        f"results/gsea_results/all_gsea_means_downsample.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/gsea/aggregate_gsea_means_downsample.R {input}"
 
-rule save_clusters:
+rule make_metrics_matrices_downsample:
+    input:
+        expand("results/metrics/{{sample}}/{{downsampleTypes}}/metrics-{{sample}}-{combo_name}.csv",combo_name=combo_names)
     output:
-        f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/paperData/clusters/{{sample}}/{{sample}}-101.csv"
+        f"results/metrics/metrics_matrices/{{sample}}-{{downsampleTypes}}-metrics.csv"
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "Rscript scripts/Rscripts/metrics/saveClusters.R {wildcards.sample}"
-rule zip_clusters:
+        "Rscript scripts/Rscripts/metrics/make_metrics_matrix_downsample.R {output} {input}"
+rule aggregate_all_metrics_downsample:
+    input:
+        expand("results/metrics/metrics_matrices/{sample}-{downsampleTypes}-metrics.csv", sample=exps, downsampleTypes = downsampleTypes)
     output:
-        f"results/pipecomp_outputs/paperData/clusters/zipped/{{sample}}.zip"
+        expand("results/metrics/{metric}_unscaled_downsample.csv", metric=["sil", "db", "ch"]),
+        f"results/metrics/all_metrics_downsample.RDS"
     container:
         "../pipecomp-singularity.sif"
     shell:
-        "zip -r results/pipecomp_outputs/paperData/clusters/zipped/{wildcards.sample}.zip results/pipecomp_outputs/paperData/clusters/{wildcards.sample}/"
+        "Rscript scripts/Rscripts/metrics/aggregate_all_metrics_downsample.R {input}"
+rule create_design_matrix_downsampled:
+    input:
+        f"results/metrics/all_metrics.RDS",
+        f"results/metrics/all_metrics_downsample.RDS",
+        f"data/experiments/colData.RDS",
+        expand("data/experiments/colData-{downsampleTypes}.RDS", downsampleTypes=downsampleTypes)
+    output:
+        f"data/uncorrected_designMatrix_scaled_all_exps_and_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/create_design_matrix_downsampled.R {output} {input}"
+rule train_test_split_downsample:
+    input:
+        f"data/uncorrected_designMatrix_scaled_all_exps_and_downsampled.RDS",
+        f"data/train_test_split.RDS"
+    output:
+        f"data/train_test_split_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/randomForest/train_test_split_downsampled.R {output} {input}"
+rule gene_expression_pca_downsampled:
+    input:
+        expand("data/experiments/{sample}/{sample}-SCE.RDS", sample=exps),
+        expand("data/experiments/downsampledExperiments/{sample}/{sample}-{downsampleTypes}.RDS", sample=exps, downsampleTypes=downsampleTypes),
+        f"data/train_test_split_downsampled.RDS"
+    output:
+        f"data/avg_expr_pca_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=50000
+    shell:
+        "Rscript scripts/Rscripts/metrics/gene_expr_pca_downsampled.R {input}"
+rule num_clusts_downsample:
+    input:
+        expand("results/pipecomp_outputs/{sample}/{sample}-{downsampleTypes}.RDSres.dataset1.endOutputs.rds", sample=exps, downsampleTypes=downsampleTypes)
+    output:
+        "results/pipecomp_outputs/num_clusters_downsampled.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/find_num_clusters_downsampled.R {input}"
+# rule clean_RF_data_downsampled:
+#     input:
+#         f"data/uncorrected_designMatrix_scaled_all_exps_and_downsampled.RDS",
+#         f"results/supervised_metrics/ari_unscaled_with_downsampled.csv",
+#         f"results/pipecomp_outputs/num_clusters.csv",
+#         f"data/avg_expr_pca.RDS"
+#     output:
+#         f"data/uncorrected_designMatrix_scaled_cleaned.RDS",
+#         f"results/supervised_metrics/ari_unscaled_cleaned.RDS",
+#         f"results/pipecomp_outputs/num_clusters_cleaned.RDS"
+#     container:
+#         "../pipecomp-singularity.sif"
+#     shell:
+#         "Rscript scripts/Rscripts/randomForest/clean_RF_data.R {input}"
+
+# # rule save_clusters:
+#     output:
+#         f"/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/paperData/clusters/{{sample}}/{{sample}}-101.csv"
+#     container:
+#         "../pipecomp-singularity.sif"
+#     shell:
+#         "Rscript scripts/Rscripts/metrics/saveClusters.R {wildcards.sample}"
+# rule zip_clusters:
+#     output:
+#         f"results/pipecomp_outputs/paperData/clusters/zipped/{{sample}}.zip"
+#     container:
+#         "../pipecomp-singularity.sif"
+#     shell:
+#         "zip -r results/pipecomp_outputs/paperData/clusters/zipped/{wildcards.sample}.zip results/pipecomp_outputs/paperData/clusters/{wildcards.sample}/"

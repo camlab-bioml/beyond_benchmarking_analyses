@@ -53,14 +53,14 @@ for (path in clustersPaths){
   }
   
   labels[,2] <- as.numeric(as.factor(labels[,2]))
-  print(head(labels))
-  print("clusters")
-  print(head(clusters))
+  #print(head(labels))
+  #print("clusters")
+  #print(head(clusters))
   
   clust_labels <- merge(clusters, labels, by="X")
   names(clust_labels)[3] <- "true_labels"
-  print("clust_labels")
-  print(head(clust_labels))
+  #print("clust_labels")
+  #print(head(clust_labels))
   
   run <- strsplit(path, split=".csv")[[1]][[1]]
   run <- strsplit(run, split="/")[[1]][[6]]
@@ -69,7 +69,15 @@ for (path in clustersPaths){
   clust_labels_name <- paste0(run, "-labelled.csv")
   clustDir <- paste("/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/labelled_clusters", expName, downsampleType, sep="/")
   clust_labels_name <- paste(clustDir, clust_labels_name, sep="/")
-  print(clust_labels_name)
+  #print(clust_labels_name)
   
+  if(nrow(clust_labels)==0){
+    print(clusters[1,2])
+    clust_labels <- as.data.frame(clust_labels)
+    print(colnames(clust_labels))
+    colnames(clust_labels)[[2]] <- clusters[1,2]
+    #print(clust_labels)
+  }
+  print(colnames(clust_labels))
   write.csv(clust_labels, clust_labels_name)
 }
