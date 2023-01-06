@@ -112,7 +112,7 @@ rule all:
         expand("results/gsea_results/downsampledExperiments/{sample}-{downsampleTypes}-{combo_name}-gsea.csv", sample=exps, downsampleTypes=downsampleTypes, combo_name=combo_names),
         expand("results/gsea_results/gsea_matrices/{sample}-{downsampleTypes}-gsea.csv", sample=exps, downsampleTypes=downsampleTypes),
         expand("results/supervised_metrics/metrics_matrices/{labelled_sample}-{downsampleTypes}-supervised.csv", labelled_sample=labelled_exps, downsampleTypes = downsampleTypes),
-        expand("results/supervised_metrics/metrics_matrices/{labelled_sample}-{downsampleTypes}-supervised.csv", labelled_sample=labelled_exps, downsampleTypes = downsampleTypes),
+        #expand("results/supervised_metrics/metrics_matrices/{labelled_sample}-{downsampleTypes}-supervised.csv", labelled_sample=labelled_exps, downsampleTypes = downsampleTypes),
         f"results/gsea_results/all_gsea_means_downsample.csv",
         expand("results/metrics/{metric}_unscaled_downsample.csv", metric=["sil", "db", "ch"]),
         f"results/metrics/all_metrics_downsample.RDS",
@@ -120,7 +120,11 @@ rule all:
         expand("results/supervised_metrics/{sup_metric}_unscaled_with_downsampled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"]),
         f"data/avg_expr_pca_downsampled.RDS",
         f"data/train_test_split_downsampled.RDS",
-        "results/pipecomp_outputs/num_clusters_downsampled.csv"
+        "results/pipecomp_outputs/num_clusters_downsampled.csv",
+        f"data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned_downsampled.RDS",
+        f"results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS",
+        "data/corrected_designMat_unscaled_downsampled.RDS"
 rule create_sce:
     input:
         f"data/experiments/{{sample}}"
@@ -668,7 +672,7 @@ rule make_supervised_matrices_downsample:
     input:
         expand("results/supervised_metrics/{{labelled_sample}}/{{downsampleTypes}}/{combo_name}.csv", combo_name=combo_names)
     output:
-        f"results/supervised_metrics/metrics_matrices/{{labelled_sample}}/{{labelled_sample}}-{{downsampleTypes}}-supervised.csv"
+        f"results/supervised_metrics/metrics_matrices/{{labelled_sample}}-{{downsampleTypes}}-supervised.csv"
     container:
         "../pipecomp-singularity.sif"
     shell:
@@ -774,20 +778,44 @@ rule num_clusts_downsample:
         "../pipecomp-singularity.sif"
     shell:
         "Rscript scripts/Rscripts/metrics/find_num_clusters_downsampled.R {input}"
-# rule clean_RF_data_downsampled:
-#     input:
-#         f"data/uncorrected_designMatrix_scaled_all_exps_and_downsampled.RDS",
-#         f"results/supervised_metrics/ari_unscaled_with_downsampled.csv",
-#         f"results/pipecomp_outputs/num_clusters.csv",
-#         f"data/avg_expr_pca.RDS"
-#     output:
-#         f"data/uncorrected_designMatrix_scaled_cleaned.RDS",
-#         f"results/supervised_metrics/ari_unscaled_cleaned.RDS",
-#         f"results/pipecomp_outputs/num_clusters_cleaned.RDS"
-#     container:
-#         "../pipecomp-singularity.sif"
-#     shell:
-#         "Rscript scripts/Rscripts/randomForest/clean_RF_data.R {input}"
+rule clean_RF_data_downsampled:
+    input:
+        f"data/uncorrected_designMatrix_scaled_all_exps_and_downsampled.RDS",
+        f"results/supervised_metrics/ari_unscaled.csv",
+        f"results/supervised_metrics/ari_unscaled_with_downsampled.csv",
+        f"results/pipecomp_outputs/num_clusters.csv",
+        f"results/pipecomp_outputs/num_clusters_downsampled.csv",
+        f"data/avg_expr_pca_downsampled.RDS"
+    output:
+        f"data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned_downsampled.RDS",
+        f"results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/randomForest/clean_RF_data_downsampled.R {input}"
+rule correct_metrics_downsampled:
+    input:
+        f"data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS",
+        f"results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS",
+        f"results/gsea_results/all_gsea_means_downsample.csv"
+    output:
+        "data/corrected_designMat_unscaled_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/metrics/correct_metrics_downsampled.R {input}"
+rule create_RF_mat_downsampled:
+    input:
+        f"data/corrected_designMat_unscaled_downsampled.RDS",
+        f"data/train_test_split_downsampled.RDS"
+    output:
+        f"data/corrected_RF_trainMatNumeric_unscaled_downsampled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/randomForest/createRFMatScaling_downsampled.R {input}"
 
 # # rule save_clusters:
 #     output:

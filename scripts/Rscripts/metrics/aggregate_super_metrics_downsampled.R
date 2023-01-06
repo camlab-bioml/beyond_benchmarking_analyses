@@ -38,6 +38,9 @@ for (i in 1:length(expsMatrices)){
   metrics$pipelines <- gsub(pattern="\\+", replacement="\\.", metrics$pipelines)
   metrics$pipelines <- gsub(pattern="\\=", replacement = "\\.", metrics$pipelines)
   
+  metrics <- metrics %>%
+    distinct()
+  
   ari[[i]] <- data.frame("pipelines"=metrics$pipelines, "ari"=metrics$aris, "exp"=expNames)
   mi[[i]] <- data.frame("pipelines"=metrics$pipelines, "mi"=metrics$mis, "exp"=expNames)
   homo[[i]] <- data.frame("pipelines"=metrics$pipelines, "homo"=metrics$homos, "exp"=expNames)
