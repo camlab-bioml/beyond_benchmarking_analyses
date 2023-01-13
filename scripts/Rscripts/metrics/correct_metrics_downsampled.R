@@ -23,6 +23,8 @@ gsea <- read.csv(args[[3]])
 gseaDownsample <- read.csv(args[[4]])
 
 # combine the gsea results from both regular and downsampled experiments
+#head(gsea)
+#head(gseaDownsample)
 gsea <- rbind(gsea, gseaDownsample)
 
 # Flip sign of db
@@ -32,10 +34,8 @@ numbers_only <- function(x) {
   sum(suppressWarnings(!is.na(as.numeric(as.character(x))))) == length(x)
 }
 
-print(head(designMat))
 designMat <- designMat %>% mutate_if(numbers_only, as.numeric)
 
-print(head(designMat))
 imputeMed <- function(x){
   x <- as.numeric(x)
   med <- median(x, na.rm=TRUE)
@@ -46,10 +46,15 @@ imputeMed <- function(x){
 gsea$X <- NULL
 gsea <- as_tibble(gsea)
 
+print(any(is.na(gsea$means)))
+
+
 gseaImp <- gsea %>%
   group_by(name) %>% 
   group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, means=imputeMed(.$means))))%>%
   dplyr::rename(gsea = means)
+
+expsWithNoClusters <- unique(gsea$name[which(is.na(gsea$means))])
 
 gseaImp$pipelines <- gsub(pattern="\"", replacement="", gseaImp$pipelines)
 gseaImp$pipelines <- gsub(pattern="\\;", replacement="\\.", gseaImp$pipelines)
@@ -60,43 +65,82 @@ gseaImp <- gseaImp %>%
   group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, scale(as.numeric(.$gsea)))))
 colnames(gseaImp)[[3]] <- "gseaScaledImp"
 
-print(head(gseaImp))
-print(head(designMat))
 
 designMat <- merge(designMat, gseaImp, by=c("pipelines", "name")) 
 
-print(head(designMat))
 silScoresCorrected <- designMat %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(silCor=resid(loess(as.numeric(.$sil) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude), pipelines=.$pipelines)))
+  group_modify(~ as.data.frame(cbind(silCor=resid(loess(as.numeric(.$sil) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude), pipelines=.$pipelines, sil=.$sil)))
 
 dbScoresCorrected <- designMat %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(dbCor=resid(loess(as.numeric(.$db) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude),pipelines=.$pipelines)))
+  group_modify(~ as.data.frame(cbind(dbCor=resid(loess(as.numeric(.$db) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude),pipelines=.$pipelines, db = .$db)))
 
 chScoresCorrected <- designMat %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(chCor=resid(loess(as.numeric(.$ch) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude),pipelines=.$pipelines)))
+  group_modify(~ as.data.frame(cbind(chCor=resid(loess(as.numeric(.$ch) ~ as.numeric(.$nclusts), na.action=na.exclude), na.action=na.exclude),pipelines=.$pipelines, ch=.$ch)))
 
-designMat <- merge(designMat, silScoresCorrected, by=c("name","pipelines"))
-designMat <- merge(designMat, dbScoresCorrected, by=c("name","pipelines"))
-designMat <- merge(designMat, chScoresCorrected, by=c("name","pipelines"))
-
-silDesignMat <- designMat %>%
+silDesignMat <- silScoresCorrected %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, silCorImp=imputeMed(.$silCor))))
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, sil = .$sil, silCor = .$silCor, silCorImp=imputeMed(.$silCor))))
 
-dbDesignMat <- designMat %>% 
+dbDesignMat <- dbScoresCorrected %>% 
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, dbCorImp=imputeMed(.$dbCor))))
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, db = .$db, dbCor = .$dbCor, dbCorImp=imputeMed(.$dbCor))))
 
-chDesignMat <- designMat %>%
+chDesignMat <- chScoresCorrected %>%
   group_by(name) %>%
-  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, chCorImp=imputeMed(.$chCor))))
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, ch = .$ch, chCor = .$chCor, chCorImp=imputeMed(.$chCor))))
 
-designMat <- merge(designMat, silDesignMat, by=c("name", "pipelines"))
-designMat <- merge(designMat, dbDesignMat, by=c("name", "pipelines"))
-designMat <- merge(designMat, chDesignMat, by=c("name", "pipelines"))
-print(head(designMat))
+
+# Find the experiments that have NAs after correction and imputation
+naexps <-unique(silDesignMat$name[which(is.na(silDesignMat$silCorImp))])
+print(naexps)
+print(length(naexps))
+
+# correct these scores using y-mean(y) and then impute the median like above 
+nascoresSil <- silDesignMat %>%
+  filter(name %in% naexps)%>%
+  select(name, ends_with("Imp"),  sil, pipelines)%>%
+  group_by(name) %>%
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, sil = .$sil, silCor = as.numeric(.$sil) - mean(as.numeric(.$sil), na.rm=TRUE))))%>%
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, sil = .$sil, silCor = .$silCor, silCorImp=imputeMed(as.numeric(.$silCor)))))
+
+nascoresDb <- dbDesignMat %>%
+  filter(name %in% naexps)%>%
+  select(name, ends_with("Imp"),  db, pipelines)%>%
+  group_by(name) %>%
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, db = .$db, dbCor = as.numeric(.$db) - mean(as.numeric(.$db), na.rm=TRUE))))%>%
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, db = .$db, dbCor = .$dbCor, dbCorImp=imputeMed(as.numeric(.$dbCor)))))
+
+nascoresCh <- chDesignMat%>%
+  filter(name %in% naexps)%>%
+  select(name, ends_with("Imp"),  ch, pipelines)%>%
+  group_by(name) %>%
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, ch = .$ch, chCor = as.numeric(.$ch) - mean(as.numeric(.$ch), na.rm=TRUE))))%>%
+  group_modify(~ as.data.frame(cbind(pipelines=.$pipelines, ch = .$ch, chCor = .$chCor, chCorImp=imputeMed(as.numeric(.$chCor)))))
+
+
+# rbind the datasets that have NAs with the original datasets and drop the 
+# rows that have NAs in the imputed column because these are duplicates 
+silScores <- rbind(silDesignMat, nascoresSil) %>%
+  drop_na(silCorImp)%>%
+  select(name, pipelines, silCorImp, silCor)
+
+dbScores <- rbind(dbDesignMat, nascoresDb) %>%
+  drop_na(dbCorImp)%>%
+  select(name, pipelines, dbCorImp, dbCor)
+
+chScores <- rbind(chDesignMat, nascoresCh) %>%
+  drop_na(chCorImp)%>%
+  select(name, pipelines, chCorImp, chCor)
+
+# merge all corrected scores with the design matrix
+designMat <- merge(designMat, silScores, by=c("name", "pipelines"))
+designMat <- merge(designMat, dbScores, by=c("name", "pipelines"))
+designMat <- merge(designMat, chScores, by=c("name", "pipelines"))
+
+designMat <- designMat %>%
+  filter(!(name %in% expsWithNoClusters))
 
 saveRDS(designMat, "/home/campbell/cfang/automl_scrna/data/corrected_designMat_unscaled_downsampled.RDS")

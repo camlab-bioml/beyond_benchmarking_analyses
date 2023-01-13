@@ -18,7 +18,22 @@ suppressPackageStartupMessages({
 args <- commandArgs(trailingOnly=TRUE)
 
 designMat <- readRDS(args[[1]])
-trainTestSplit <- readRDS(args[[2]])
+designMatDownsampled <- readRDS(args[[2]])
+trainTestSplit <- readRDS(args[[3]])
+
+print(colnames(designMat))
+print(colnames(designMatDownsampled))
+
+designMat$downsampleType <- ""
+
+designMatDownsampled <- designMatDownsampled %>%
+  dplyr::rename(pct_counts_in_top_50_features = percent.top_50)
+
+print(setdiff(colnames(designMat), colnames(designMatDownsampled)))
+print(setdiff(colnames(designMatDownsampled), colnames(designMat)))
+
+designMat <- rbind(designMat, designMatDownsampled)
+print(unique(designMat$name))
 
 numbers_only <- function(x) {
   sum(suppressWarnings(!is.na(as.numeric(as.character(x))))) == length(x)
@@ -48,13 +63,14 @@ createRFMat <- function(designMat, testSet=FALSE, trainMeans=NULL, trainVars=NUL
     df$filt <- designMat$filt
     df$norm <- designMat$norm 
   }else{
+    print(head(df))
     trainMeans <- df %>%
-      select(-c("name", "pipelines", "filt", "norm"))%>%
+      select(-c("name", "pipelines", "filt", "norm", "downsampleType"))%>%
       mutate_if(numbers_only, as.numeric) %>%
       colMeans()
     
     trainVars <- df %>%
-      select(-c("name", "pipelines", "filt", "norm"))%>%
+      select(-c("name", "pipelines", "filt", "norm", "downsampleType"))%>%
       mutate_if(numbers_only, as.numeric) %>%
       as.matrix()%>%
       colVars()
@@ -76,19 +92,24 @@ createRFMat <- function(designMat, testSet=FALSE, trainMeans=NULL, trainVars=NUL
 }
 
 # train test split
+print(any(is.na(designMat$silCorImp)))
+
 designMatTrain <- designMat %>%
   filter(apply(sapply(trainTestSplit$train, FUN = grepl, .$name), MARGIN=1, FUN=any))
 
-designMatTrain <- designMat %>%
+designMatTest <- designMat %>%
   filter(apply(sapply(trainTestSplit$test, FUN = grepl, .$name), MARGIN=1, FUN=any))
 
 trainMatNum <- createRFMat(designMatTrain, testSet = FALSE)
 testMatNum <- createRFMat(designMatTest, testSet=TRUE, trainMeans = trainMatNum$trainMeans, trainVars = trainMatNum$trainVars)
 
+print("train")
 head(trainMatNum$data)
+print("test")
 head(testMatNum$data)
 
 testMatNum$data <- testMatNum$data[,colnames(trainMatNum$data)]
+print(any(is.na(trainMatNum$labels$silCorImp)))
 
 saveRDS(trainMatNum, "/home/campbell/cfang/automl_scrna/data/corrected_RF_trainMatNumeric_unscaled_downsampled.RDS")
 saveRDS(testMatNum, "/home/campbell/cfang/automl_scrna/data/corrected_RF_testMatNumeric_unscaled_downsampled.RDS")

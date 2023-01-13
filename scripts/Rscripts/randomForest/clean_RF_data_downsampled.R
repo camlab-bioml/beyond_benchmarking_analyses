@@ -87,6 +87,6 @@ designMat <- merge(designMat, avg_expr_scores, by="name")
 
 print(head(designMat))
 # 
-saveRDS(designMat, "/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled_cleaned_with_downsampled.RDS")
-saveRDS(ari, "/home/campbell/cfang/automl_scrna/results/supervised_metrics/ari_unscaled_cleaned_with_downsampled.RDS")
-saveRDS(nclusts, "/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters_cleaned.RDS_with_downsampled")
+saveRDS(designMat, "/home/campbell/cfang/automl_scrna/data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS")
+saveRDS(ari, "/home/campbell/cfang/automl_scrna/results/supervised_metrics/ari_unscaled_cleaned_downsampled.RDS")
+saveRDS(nclusts, "/home/campbell/cfang/automl_scrna/results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS")

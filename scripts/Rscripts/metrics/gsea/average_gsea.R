@@ -29,7 +29,7 @@ gseatidy$pipelines <- NULL
 gseatidy$name <- NULL
 
 gsea_tidy <- gseatidy %>%
-  mutate(across(starts_with("X"),as.numeric))%>%
+  mutate(across(starts_with("X", ignore.case=FALSE),as.numeric))%>%
   mutate(means=rowMeans(., na.rm=TRUE))
 
 gsea_tidy <- cbind(pipelines = pipelines, name=name, gsea_tidy)

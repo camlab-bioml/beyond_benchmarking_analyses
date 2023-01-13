@@ -798,6 +798,7 @@ rule correct_metrics_downsampled:
     input:
         f"data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS",
         f"results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS",
+        f"results/gsea_results/all_gsea_means.csv"
         f"results/gsea_results/all_gsea_means_downsample.csv"
     output:
         "data/corrected_designMat_unscaled_downsampled.RDS"

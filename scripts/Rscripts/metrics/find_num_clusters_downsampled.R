@@ -16,9 +16,17 @@ for (i in 1:length(exps)){
   exp.name <- strsplit(exps[[i]], split="/")[[1]][[4]]
   exp.name <- strsplit(exp.name, split=".RDS")[[1]][[1]]
   expnames <- c(expnames, exp.name)
-  clusts <- readRDS(exps[[i]])
-  clusts <- lapply(clusts, unique)
+  clusters <- readRDS(exps[[i]])
+  clusts <- lapply(clusters, unique)
   clusts <- lapply(clusts, length)
+  #print(dim(clusts))
+  #print(clusts)
+  if (any(clusters == "NA")){
+    print('no clusters')
+    print(which(clusters=="NA"))
+    clusts[which(clusters=="NA")] <- 0
+    print(clusts)
+  }
   pipelines <- names(clusts)
   names(clusts) <- NULL
   clusts <- unlist(clusts)
