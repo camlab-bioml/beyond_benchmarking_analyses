@@ -124,7 +124,9 @@ rule all:
         f"data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS",
         f"results/supervised_metrics/ari_unscaled_cleaned_downsampled.RDS",
         f"results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS",
-        "data/corrected_designMat_unscaled_downsampled.RDS"
+        "data/corrected_designMat_unscaled_downsampled.RDS",
+        "results/models/linearRegression/allTermsInteractions/LR_int_allTerms_downsampled.RDS",
+        "results/models/linearRegression/linearRegressionPreds_withDownsampled.RDS"
 rule create_sce:
     input:
         f"data/experiments/{{sample}}"
@@ -798,7 +800,7 @@ rule correct_metrics_downsampled:
     input:
         f"data/uncorrected_designMatrix_scaled_cleaned_downsampled.RDS",
         f"results/pipecomp_outputs/num_clusters_cleaned_downsampled.RDS",
-        f"results/gsea_results/all_gsea_means.csv"
+        f"results/gsea_results/all_gsea_means.csv",
         f"results/gsea_results/all_gsea_means_downsample.csv"
     output:
         "data/corrected_designMat_unscaled_downsampled.RDS"
@@ -808,6 +810,7 @@ rule correct_metrics_downsampled:
         "Rscript scripts/Rscripts/metrics/correct_metrics_downsampled.R {input}"
 rule create_RF_mat_downsampled:
     input:
+        f"data/corrected_designMat_unscaled.RDS",
         f"data/corrected_designMat_unscaled_downsampled.RDS",
         f"data/train_test_split_downsampled.RDS"
     output:
@@ -817,6 +820,26 @@ rule create_RF_mat_downsampled:
         "../pipecomp-singularity.sif"
     shell:
         "Rscript scripts/Rscripts/randomForest/createRFMatScaling_downsampled.R {input}"
+rule linear_regression_downsampled:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled_downsampled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled_downsampled.RDS"
+    output:
+        "results/models/linearRegression/linearRegressionPreds_withDownsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/linearRegression_downsampled.R {input}"
+rule linear_regression_interactions_downsampled:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled_downsampled.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled_downsampled.RDS"
+    output:
+        "results/models/linearRegression/allTermsInteractions/LR_int_allTerms_downsampled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript scripts/Rscripts/linearRegression/LR-int-downsampled.R {input}"
 
 # # rule save_clusters:
 #     output:

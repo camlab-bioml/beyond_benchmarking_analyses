@@ -28,12 +28,14 @@ name <- gseatidy$name
 gseatidy$pipelines <- NULL
 gseatidy$name <- NULL
 
+print(head(gseatidy))
+gseatidy$x <- NULL
 gsea_tidy <- gseatidy %>%
   mutate(across(starts_with("X", ignore.case=FALSE),as.numeric))%>%
   mutate(means=rowMeans(., na.rm=TRUE))
 
 gsea_tidy <- cbind(pipelines = pipelines, name=name, gsea_tidy)
-exp.name <- strsplit(args[[1]], split="/")[[1]][[9]]
+exp.name <- strsplit(args[[1]], split="/")[[1]][[4]]
 exp.name <- strsplit(exp.name, split="-gsea.csv")[[1]][[1]]
 file.name <- paste0("/home/campbell/cfang/automl_scrna/results/gsea_results/gsea_matrices/", exp.name)
 file.name <- paste0(file.name, "-gsea-averaged.csv")
