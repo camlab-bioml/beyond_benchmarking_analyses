@@ -21,7 +21,7 @@ numbers_only <- function(x) {
 }
 
 
-models <- readRDS("RFPreds_NumericParams.RDS")
+models <- readRDS("pipelinesOnlyRFPreds_Params.RDS")
 designMat <- readRDS("corrected_designMat_unscaled.RDS")
 ari <- readRDS("ari_unscaled_cleaned.RDS")
 #RFType <- "Numeric"
@@ -110,7 +110,7 @@ plotPredsARI <- function(df, ariMat, metric="", model="", npage=2){
     group_modify(~as.data.frame(cor(.$preds, .$ARI)))
   ariCors <- as.data.frame(ariCors)
   for (i in 1:npage) {
-   p <- ggplot(df, aes(x=ARI, y=preds))+
+    p <- ggplot(df, aes(x=ARI, y=preds))+
       geom_point(aes(colour=as.factor(res)))+
       labs(colour = "Clustering\nresolution")+
       facet_wrap(~name, scales="free")+
@@ -123,10 +123,10 @@ plotPredsARI <- function(df, ariMat, metric="", model="", npage=2){
         hjust   = 1.05,
         vjust   = 1.5
       )+ 
-     cowplot::theme_cowplot()+
-     theme(strip.background = element_rect(fill="white"),
-           strip.text = element_text(face="bold"))
-   print(p)
+      cowplot::theme_cowplot()+
+      theme(strip.background = element_rect(fill="white"),
+            strip.text = element_text(face="bold"))
+    print(p)
   }
   
 }
@@ -185,7 +185,7 @@ testCors <- dplyr::bind_rows(list(sil=silTestDatasetCors, db=dbTestDatasetCors, 
   mutate(metric = toupper(metric))
 
 testCors$metricf <- factor(testCors$metric, levels=c("CH", "DB", "SIL", "GSEA"))
-pdf("PaperFigures/RFOriginalResultsPlots.pdf")
+pdf("PaperFigures/RFOriginalResultsPlots_pipelinesOnly.pdf")
 ggplot(testCors, aes(x=tidytext::reorder_within(name, -Cor, metric), y=Cor))+
   geom_bar(stat="identity")+
   xlab("Dataset")+
@@ -203,7 +203,7 @@ dbParams = sprintf("RF (mtry=%s, ntree=%s)", dbRF$mtry, dbRF$ntree)
 chParams = sprintf("RF (mtry=%s, ntree=%s)", chRF$mtry, chRF$ntree)
 gseaParams = sprintf("RF (mtry=%s, ntree=%s)", gseaRF$mtry, gseaRF$ntree)
 
-filename <-"PaperFigures/RFPlots_NumericParams_plots.pdf"
+filename <-"PaperFigures/RFPlots_NumericParams_plots_pipelinesOnly.pdf"
 pdf(filename)
 # Predicted vs Actual plots ###
 plotPredActuals(silTestPlot, metric="Sil (Test set)", model=silParams, silTestDatasetCors, npage=3)
@@ -276,7 +276,7 @@ allARIdf <- mutate(allARIdf, metric=toupper(metric))
 
 allARIdf$metricf <- factor(allARIdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
 
-pdf("PaperFigures/RFOrig_predictionsARICorBoxplot.pdf", width=5, height=5.85)
+pdf("PaperFigures/RFOrig_predictionsARICorBoxplot_pipelinesOnly.pdf", width=5, height=5.85)
 ggplot(allARIdf, aes(x=metricf, y=V1, fill=metric))+
   geom_boxplot()+
   xlab("Metric")+
@@ -296,7 +296,7 @@ ggplot(allARIdf, aes(x=metricf, y=V1, fill=metric))+
         legend.position = "none")
 dev.off()
 
-pdf("PaperFigures/RFOrig_ariCorBar.pdf")
+pdf("PaperFigures/RFOrig_ariCorBar_pipelinesOnly.pdf")
 ggplot(allARIdf, aes(x=tidytext::reorder_within(name, -V1, metric), y=V1))+
   geom_bar(stat="identity")+
   facet_wrap(~metric, scale="free")+
@@ -350,7 +350,7 @@ corHm <- ComplexHeatmap::Heatmap((as.matrix(corHmDf)), name="Correlation of\ndat
 ht_opt$heatmap_row_names_gp = gpar(fontsize = 16)
 ht_opt$heatmap_column_names_gp = gpar(fontsize = 16)
 
-pdf("PaperFigures/RFOrig_datasetFeaturePerformanceHeatmaps.pdf")
+pdf("PaperFigures/RFOrig_datasetFeaturePerformanceHeatmaps_pipelinesOnly.pdf")
 draw(corHm,
      row_title="Feature", 
      column_title="Metric", 
@@ -382,7 +382,7 @@ corbpdf$metric <- sub("^Cor", "", corbpdf$metric)
 corbpdf <- corbpdf %>%
   mutate(metric=toupper(metric))
 
-pdf("PaperFigures/RFOrig_predictionMetricCorBoxplot.pdf", width=6.25, height=6.1)
+pdf("PaperFigures/RFOrig_predictionMetricCorBoxplot_pipelinesOnly.pdf", width=6.25, height=6.1)
 corbpdf$metricf <- factor(corbpdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
 ggplot(corbpdf, aes(x=metricf, y=value, fill=metric))+
   geom_boxplot()+
