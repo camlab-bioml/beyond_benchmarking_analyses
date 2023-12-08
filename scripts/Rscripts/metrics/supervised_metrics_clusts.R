@@ -22,7 +22,7 @@ print("-----cell type------")
 print(cellTypes)
 authorLabels <- cellTypes[grepl("author", cellTypes)]
 print(length(authorLabels))
-if (length(authorLabels)!=1){
+if (length(authorLabels) < 1){
   print("empty authorLabels")
   authorLabels <- cellTypes[grepl("Factor", cellTypes)]
   authorLabels <- authorLabels[!grepl("Ontology Term", authorLabels)]
