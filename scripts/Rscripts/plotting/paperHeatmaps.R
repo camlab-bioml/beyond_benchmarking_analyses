@@ -11,14 +11,14 @@ suppressPackageStartupMessages({
   library(circlize)
   library(viridis)
 })
-#designMatPath <- "uncorrected_designMatrix_scaled.RDS"
-#numClustersPath <- "num_clusters_cleaned.RDS"
-#designMatCor <- readRDS("corrected_designMat_unscaled.RDS")
+designMatPath <- "uncorrected_designMatrix_scaled.RDS"
+numClustersPath <- "num_clusters_cleaned.RDS"
+designMatCor <- readRDS("corrected_designMat_unscaled.RDS")
 
-args <- commandArgs(trailingOnly = TRUE)
-designMatPath <- args[[1]]
-numClustersPath <- args[[2]]
-designMatCor <- readRDS(args[[3]])
+# args <- commandArgs(trailingOnly = TRUE)
+# designMatPath <- args[[1]]
+# numClustersPath <- args[[2]]
+# designMatCor <- readRDS(args[[3]])
 
 nclusts <- readRDS(numClustersPath)
 
@@ -71,6 +71,9 @@ dimsdf <- silMat %>%
 filtdf <- silMat %>%
   as_tibble()%>%
   select(filt)
+  # mutate(filt=case_when(filt=="lenient" ~ 1,
+  #                       filt=="default" ~ 2,
+  #                       filt=="stringent"~ 3))
 
 dbMat <- dbMat %>%
   as_tibble() %>%
@@ -99,7 +102,7 @@ gseaMat <- designMatCor %>%
 
 res_col = circlize::colorRamp2(as.numeric(unique(resdf$res)), hcl.colors(8, "Teal"))
 dims_col = circlize::colorRamp2(as.numeric(unique(dimsdf$dims)), hcl.colors(4, "YlOrRd"))
-filt_col = circlize::colorRamp2(unique(filtdf$filt), hcl.colors(3, "Blues"))
+#filt_col = circlize::colorRamp2(c(3,2,1), hcl.colors(3, "Blues"))
 
 n=nrow(chMat)*ncol(chMat)
 colFunCH = circlize::colorRamp2(seq(-2, 2, length = n), hcl.colors(n,"viridis"))
@@ -112,7 +115,7 @@ sil_row_ha = rowAnnotation("Filtering\nstrategy" = filtdf$filt,
                            "Normalization\nstrategy" = normdf$norm, 
                             "Clustering\nresolution" = as.numeric(resdf$res),
                            "Dimensions"=as.numeric(dimsdf$dims),
-                           col = list("Filtering\nstrategy" = c("lenient" = "#F4FAFE", "default" = "#7FABD3", "stringent" = "#273871"),
+                           col = list("Filtering\nstrategy" = c("lenient" = "#F4FAFEFF", "default" = "#7FABD3FF", "stringent" = "#273871FF"),
                                       "Normalization\nstrategy" = c("seurat" = "#089392", "sctransform" = "#EAE29C", "scran" = "#CF597E"), 
                                       "Clustering\nresolution"= res_col,
                                       "Dimensions"=dims_col),
@@ -162,8 +165,8 @@ gseaHM <- ComplexHeatmap::Heatmap(as.matrix(gseaMat), col=colFunGsea, name="Metr
                                  height = unit(10.1, "cm"),
                                  heatmap_legend_param = list(direction = "horizontal",
                                                              legend_gp = gpar(fontsize = 6)))
-#pdf("PaperFigures/MetricsHeatmaps.pdf")
-pdf("/home/campbell/cfang/automl_scrna/results/figures/uncorrectedMetricsHeatmaps.pdf")
+pdf("PaperFigures/MetricsHeatmaps.pdf")
+#pdf("/home/campbell/cfang/automl_scrna/results/figures/uncorrectedMetricsHeatmaps.pdf")
 draw(chHM + dbHM + silHM + gseaHM, 
      row_title="Pipeline", 
      column_title="Dataset",
@@ -174,27 +177,27 @@ draw(chHM + dbHM + silHM + gseaHM,
 dev.off()
 
 
-RFTrain <- readRDS(args[[4]])
-RFTest <- readRDS(args[[5]])
+RFTrain <- readRDS("corrected_RF_trainMatNumeric_unscaled.RDS")
+RFTest <- readRDS("corrected_RF_testMatNumeric_unscaled.RDS")
 
 trainMat <- RFTrain$data
 testMat <- RFTest$data 
 
 rfMat <- rbind(trainMat, testMat) %>%
   as_tibble()%>%
-  select(-c(name, pipelines, filt, dims, norm ,res))%>%
+  select(-c(pipelines, filt, dims, norm ,res))%>%
   distinct()%>%
   rename_with( ~ gsub("V", "PC", .x, fixed = TRUE))
+# 
+# for (i in 1:length(names(rfMat))){
+#   if (grepl("^PC", names(rfMat)[[i]])){
+#     num <- as.numeric(strsplit(names(rfMat)[[i]], split="PC")[[1]][[2]])-1
+#     names(rfMat)[[i]] <- paste0("PC", num)
+#   }
+# }
 
-for (i in 1:length(names(rfMat))){
-  if (grepl("^PC", names(rfMat)[[i]])){
-    num <- as.numeric(strsplit(names(rfMat)[[i]], split="PC")[[1]][[2]])-1
-    names(rfMat)[[i]] <- paste0("PC", num)
-  }
-}
-
-#pdf("PaperFigures/datasetFeaturesHeatmap.pdf")
-pdf("/home/campbell/cfang/automl_scrna/results/figures/datasetFeaturesHeatmap.pdf")
+pdf("PaperFigures/datasetFeaturesHeatmap.pdf")
+#pdf("/home/campbell/cfang/automl_scrna/results/figures/datasetFeaturesHeatmap.pdf")
 colfun <- circlize::colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
 ComplexHeatmap::Heatmap(t(as.matrix(rfMat)),
                         col=colfun, 
@@ -206,3 +209,25 @@ ComplexHeatmap::Heatmap(t(as.matrix(rfMat)),
                         heatmap_width = unit(16, "cm"), 
                         heatmap_height = unit(11, "cm"))
 dev.off()
+
+
+designMat <- designMatCor%>%
+  select(!contains(c("ch","db","sil", "gsea")))%>%
+  select(!nclusts)%>%
+  select(!pipelines)%>%
+  select(!c("filt", "dims", "norm", "res"))%>%
+  distinct()
+
+designMat_long <- designMat %>%
+  select(name, subsets_Mt_percent, subsets_ribosomal_percent, 
+         PC4, PC6, PC11, PC16, PC18, PC17, PC20,
+         subsets_Mt_sum, subsets_ribosomal_sum, subsets_coding_sum) %>%
+  tidyr::pivot_longer(!name, names_to="metric", values_to="value")
+
+designMat_sum <- designMat_long %>%
+  filter(metric %in% c("subsets_coding_sum", "subsets_Mt_sum", "subsets_ribosomal_sum"))%>%
+  filter(value <= 1000)
+
+ggplot(designMat_sum, aes(x=value))+
+  geom_histogram()+
+  facet_wrap(~metric, scales="free")
