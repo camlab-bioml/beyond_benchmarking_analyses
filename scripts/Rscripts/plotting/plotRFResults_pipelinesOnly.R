@@ -6,7 +6,7 @@ suppressPackageStartupMessages({
   library(Matrix) # CRAN
   library(purrr)
   library(ggplot2)
-  library(Metrics)
+  #library(Metrics)
   library(gridExtra)
   library(matrixStats)
   library(stringr)
@@ -21,9 +21,9 @@ numbers_only <- function(x) {
 }
 
 
-models <- readRDS("pipelinesOnlyRFPreds_Params.RDS")
-designMat <- readRDS("corrected_designMat_unscaled.RDS")
-ari <- readRDS("ari_unscaled_cleaned.RDS")
+models <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/pipelinesOnlyRFPreds_Params.RDS")
+designMat <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/corrected_designMat_unscaled.RDS")
+ari <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/ari_unscaled_cleaned.RDS")
 #RFType <- "Numeric"
 
 # args <- commandArgs(trailingOnly=TRUE)
@@ -185,7 +185,7 @@ testCors <- dplyr::bind_rows(list(sil=silTestDatasetCors, db=dbTestDatasetCors, 
   mutate(metric = toupper(metric))
 
 testCors$metricf <- factor(testCors$metric, levels=c("CH", "DB", "SIL", "GSEA"))
-pdf("PaperFigures/RFOriginalResultsPlots_pipelinesOnly.pdf")
+#pdf("PaperFigures/RFOriginalResultsPlots_pipelinesOnly.pdf")
 ggplot(testCors, aes(x=tidytext::reorder_within(name, -Cor, metric), y=Cor))+
   geom_bar(stat="identity")+
   xlab("Dataset")+
@@ -196,7 +196,7 @@ ggplot(testCors, aes(x=tidytext::reorder_within(name, -Cor, metric), y=Cor))+
   facet_wrap(~ metricf, scale="free_x")+
   theme(strip.background = element_rect(fill="white"),
         strip.text = element_text(face="bold", size=20))
-dev.off()
+#dev.off()
 
 silParams = sprintf("RF (mtry=%s, ntree=%s)", silRF$mtry, silRF$ntree)
 dbParams = sprintf("RF (mtry=%s, ntree=%s)", dbRF$mtry, dbRF$ntree)
@@ -204,7 +204,7 @@ chParams = sprintf("RF (mtry=%s, ntree=%s)", chRF$mtry, chRF$ntree)
 gseaParams = sprintf("RF (mtry=%s, ntree=%s)", gseaRF$mtry, gseaRF$ntree)
 
 filename <-"PaperFigures/RFPlots_NumericParams_plots_pipelinesOnly.pdf"
-pdf(filename)
+#pdf(filename)
 # Predicted vs Actual plots ###
 plotPredActuals(silTestPlot, metric="Sil (Test set)", model=silParams, silTestDatasetCors, npage=3)
 plotPredActuals(silTrainPlot, metric="Sil (Train set)", model=silParams, silTrainDatasetCors, npage=7)
@@ -221,7 +221,7 @@ plotPredsARI(dbTestPlot, ari_tbl, metric="DB", model=dbParams)
 plotPredsARI(chTestPlot, ari_tbl, metric="CH", model=chParams)
 plotPredsARI(gseaTestPlot, ari_tbl, metric="GSEA", model=gseaParams)
 
-dev.off()
+#dev.off()
 ### ColData ARI Correlation heatmap ###
 
 silARICor <- createARIPlotMat(silTestPlot, ari_tbl)
@@ -273,10 +273,11 @@ wilcoxLabelsARI <- c(wilcox.test(chARICor$V1, alternative="greater")$p.value,
 wilcoxLabelsARI <- as.data.frame(wilcoxLabelsARI)
 wilcoxLabelsARI <- cbind(wilcoxLabelsARI, metric=c("CH","DB","GSEA","SIL"))
 allARIdf <- mutate(allARIdf, metric=toupper(metric))
+wilcoxLabelsARI$wilcoxLabelsARI <- p.adjust(wilcoxLabelsARI$wilcoxLabelsARI, method="BH")
 
 allARIdf$metricf <- factor(allARIdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
 
-pdf("PaperFigures/RFOrig_predictionsARICorBoxplot_pipelinesOnly.pdf", width=5, height=5.85)
+pdf("./Documents/2022_autoMLscRNA_Cindy/PaperFigures/RFOrig_predictionsARICorBoxplot_pipelinesOnly_padj.pdf", width=5, height=5.85)
 ggplot(allARIdf, aes(x=metricf, y=V1, fill=metric))+
   geom_boxplot()+
   xlab("Metric")+
@@ -296,7 +297,7 @@ ggplot(allARIdf, aes(x=metricf, y=V1, fill=metric))+
         legend.position = "none")
 dev.off()
 
-pdf("PaperFigures/RFOrig_ariCorBar_pipelinesOnly.pdf")
+#pdf("PaperFigures/RFOrig_ariCorBar_pipelinesOnly.pdf")
 ggplot(allARIdf, aes(x=tidytext::reorder_within(name, -V1, metric), y=V1))+
   geom_bar(stat="identity")+
   facet_wrap(~metric, scale="free")+
@@ -308,7 +309,7 @@ ggplot(allARIdf, aes(x=tidytext::reorder_within(name, -V1, metric), y=V1))+
   facet_wrap(~ metricf, scale="free_x")+
   theme(strip.background = element_rect(fill="white"),
         strip.text = element_text(face="bold", size=20))
-dev.off()
+#dev.off()
 
 ### ColData Correlation Heatmap ###
 silCol <- makeColdataDF(silTestDatasetCors)
@@ -350,17 +351,17 @@ corHm <- ComplexHeatmap::Heatmap((as.matrix(corHmDf)), name="Correlation of\ndat
 ht_opt$heatmap_row_names_gp = gpar(fontsize = 16)
 ht_opt$heatmap_column_names_gp = gpar(fontsize = 16)
 
-pdf("PaperFigures/RFOrig_datasetFeaturePerformanceHeatmaps_pipelinesOnly.pdf")
-draw(corHm,
-     row_title="Feature", 
-     column_title="Metric", 
-     column_title_side="bottom")
-
-draw(ariHm,
-     row_title="Feature", 
-     column_title="Metric", 
-     column_title_side="bottom")
-dev.off()
+# pdf("PaperFigures/RFOrig_datasetFeaturePerformanceHeatmaps_pipelinesOnly.pdf")
+# draw(corHm,
+#      row_title="Feature", 
+#      column_title="Metric", 
+#      column_title_side="bottom")
+# 
+# draw(ariHm,
+#      row_title="Feature", 
+#      column_title="Metric", 
+#      column_title_side="bottom")
+# dev.off()
 
 ### ColData Correlation Boxplot ###
 corbpdf <- merge(silTestDatasetCors, dbTestDatasetCors, by="name", suffix=c("Sil","Db"))
@@ -378,11 +379,12 @@ wilcoxLabels <- c(wilcox.test(chTestDatasetCors$Cor, alternative="greater")$p.va
 wilcoxLabels <- as.data.frame(wilcoxLabels)
 wilcoxLabels <- cbind(wilcoxLabels, metric=c("CH","DB","GSEA","SIL"))
 corbpdf$metric <- sub("^Cor", "", corbpdf$metric)
+wilcoxLabels$wilcoxLabels <- p.adjust(wilcoxLabels$wilcoxLabels, method="BH")
 
 corbpdf <- corbpdf %>%
   mutate(metric=toupper(metric))
 
-pdf("PaperFigures/RFOrig_predictionMetricCorBoxplot_pipelinesOnly.pdf", width=6.25, height=6.1)
+pdf("./Documents/2022_autoMLscRNA_Cindy/PaperFigures/RFOrig_predictionMetricCorBoxplot_pipelinesOnly_padj.pdf", width=6.25, height=6.1)
 corbpdf$metricf <- factor(corbpdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
 ggplot(corbpdf, aes(x=metricf, y=value, fill=metric))+
   geom_boxplot()+
