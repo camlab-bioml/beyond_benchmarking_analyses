@@ -1,0 +1,365 @@
+import pandas as pd
+import yaml
+
+
+with open(r"code/config_files/experiments.yaml") as file:
+    exps = yaml.load(file, Loader=yaml.FullLoader)
+exps = exps.get("Experiments")
+
+with open(r"code/config_files/labelled_exps.yaml") as file:
+    labelled_exps = yaml.load(file, Loader=yaml.FullLoader)
+labelled_exps = labelled_exps.get("Labelled_Experiments")
+
+with open(r"code/config_files/large_experiments.yaml") as file:
+    large_exps = yaml.load(file, Loader=yaml.FullLoader)
+large_exps = large_exps.get("Large_Experiments")
+
+combo_names = [str(x) for x in range(1,325)]
+metrics = ["sil", "db", "ch", "gsea"]
+RFTypes = ["Numeric"]
+modelFeaturesType = ["pipelinesOnly", "allTermsInteractions"]
+wildcard_constraints:
+    sample = "|".join(exps),
+    combo_name = "|".join(combo_names),
+    labelled_sample = "|".join(labelled_exps),
+    large_sample = "|".join(large_exps),
+    metrics = "|".join(metrics),
+    RFTypes = "|".join(RFTypes)
+
+rule all:
+    input:
+        expand(f"data/experiments/{{sample}}/{{sample}}-experiment-metadata-files.zip", sample=exps),
+        expand(f"data/experiments/{{sample}}/{{sample}}.sdrf.txt", sample=exps),
+        expand(f"data/experiments/{{sample}}/{{sample}}.idf.txt", sample=exps),
+        #f"data/experiments/collated-metadata.csv",
+        expand(f"data/large_experiments/{{large_sample}}/{{large_sample}}-SCE.RDS", large_sample=large_exps),
+        expand(f"results/pipecomp_outputs/{{large_sample}}/{{large_sample}}res.dataset1.endOutputs.rds", large_sample=large_exps),
+        expand(f"results/pipecomp_outputs/singleR_labelled_clusters/E-GEOD-114530/{{combo_name}}-singleR-labelled.csv", combo_name=combo_names),
+        #expand(f"results/pipecomp_outputs/clusters/{{large_sample}}/{{combo_name}}.csv", large_sample=large_exps, combo_name=combo_names),
+        #expand(f"results/pipecomp_outputs/H5AD_files/{{large_sample}}/{{combo_name}}.h5ad", large_sample=large_exps, combo_name=combo_names),
+        expand(f"results/supervised_metrics/singleR/E-GEOD-114530/{{combo_name}}-singleR.csv", combo_name=combo_names),
+        expand(f"results/gsea_results/{{large_sample}}-{{combo_name}}-gsea.csv", large_sample=large_exps, combo_name=combo_names),
+        "results/pipecomp_outputs/num_clusters.csv",
+        expand(f"results/metrics/{{large_sample}}/metrics-{{large_sample}}-{{combo_name}}.csv", large_sample=large_exps, combo_name=combo_names),
+        expand(f"results/metrics/metrics_matrices/{{large_sample}}-metrics.csv", large_sample=large_exps),
+        f"data/large_experiments/large_samples-colData.RDS",
+        f"results/metrics/large_samples-all_metrics.RDS",
+        f"data/large-samples_uncorrected_designMatrix_scaled.RDS",
+        f"data/large_samples_avg_expr_pca.RDS",
+        f"data/large_samples_uncorrected_designMatrix_scaled_cleaned.RDS",
+        expand("results/gsea_results/gsea_matrices/{large_sample}-gsea.csv", large_sample=large_exps),
+        f"results/gsea_results/large_samples_all_gsea_means.csv",
+        "data/large_samples_corrected_designMat_unscaled.RDS",
+        f"data/large_samples_corrected_RF_testMatNumeric_unscaled.RDS",
+        f"results/models/randomForest/large_samples_RFPreds_NumericParams.RDS",
+        f"results/models/randomForest/RFPreds_NumericParams_withMeta.RDS",
+        f"results/figures/randomForest/allTermsInteractions/RFAllTermsInteractionsPlots_withMeta.pdf",
+        f"results/supervised_metrics/metrics_matrices/E-GEOD-114530-supervised-singleR.csv",
+        f"results/figures/randomForest/allTermsInteractions/large_samples_RFAllTermsInteractionsPlots.pdf",
+        "results/models/linearRegression/linear_regression_large_samples_preds.RDS",
+        "results/figures/linearRegression/LR-int_featImp.pdf"
+
+rule download_dataset_metadata:
+    output:
+        f"data/experiments/{{sample}}/{{sample}}-experiment-metadata-files.zip"
+    shell:
+        """
+        curl --output {output} https://www.ebi.ac.uk/gxa/sc/experiment/{wildcards.sample}/download/zip?fileType=experiment-metadata&accessKey=
+        """
+rule unzip_dataset_metadata:
+    input:
+        f"data/experiments/{{sample}}/{{sample}}-experiment-metadata-files.zip"
+    output:
+        f"data/experiments/{{sample}}/{{sample}}.sdrf.txt",
+        f"data/experiments/{{sample}}/{{sample}}.idf.txt",
+    shell:
+        "unzip {input} -d data/experiments/{wildcards.sample}/"
+
+# rule collate_datasets_metadata:
+#     input:
+#         expand(f"data/experiments/{{sample}}/{{sample}}.sdrf.txt", sample=exps)
+#     output:
+#         f"data/experiments/collated-metadata.csv"
+#     container:
+#         "../pipecomp-singularity.sif"
+#     shell:
+#         "Rscript code/datasets-metadata/collate_datasets_metadata.R {input}"
+rule create_large_sce:
+    input:
+        f"data/large_experiments/{{large_sample}}"
+    output:
+        f"data/large_experiments/{{large_sample}}/{{large_sample}}-SCE.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=105000
+    shell:
+        "Rscript code/clustering/create_sce.R {input[0]}"
+rule run_pipeline:
+    input:
+        f"code/config_files/alternatives.yaml",
+        f"data/large_experiments/{{large_sample}}/{{large_sample}}-SCE.RDS"
+    output:
+        f"results/pipecomp_outputs/{{large_sample}}/{{large_sample}}res.dataset1.endOutputs.rds"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+         mem_mb=515435
+    shell:
+        "Rscript code/clustering/run_pipecomp.R {input[0]} {input[1]}"
+# rule split_clusters:
+# input:
+#   f"results/pipecomp_outputs/{{large_sample}}/{{large_sample}}res.dataset1.endOutputs.rds"
+# output:
+#  expand("results/pipecomp_outputs/clusters/{{large_sample}}/{combo_name}.csv", combo_name=combo_names),
+#   expand("results/pipecomp_outputs/H5AD_files/{{large_sample}}/{combo_name}.h5ad", combo_name=combo_names#)
+#  container:
+#     "../pipecomp-singularity.sif"
+# resources:
+#      mem_mb=128900
+#    shell:
+#        "Rscript code/clustering/split_clusters.R {input[0]}"
+rule compute_metrics:
+    input:
+        f"results/pipecomp_outputs/H5AD_files/{{large_sample}}/{{combo_name}}.h5ad",
+        f"results/pipecomp_outputs/clusters/{{large_sample}}/{{combo_name}}.csv"
+    output:
+        f"results/metrics/{{large_sample}}/metrics-{{large_sample}}-{{combo_name}}.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=15000
+    shell:
+        "python3 code/metrics/metrics.py --sce {input[0]} --clust {input[1]}"
+rule num_clusts:
+    input:
+        expand("results/pipecomp_outputs/{large_sample}/{large_sample}res.dataset1.endOutputs.rds", large_sample=large_exps)
+    output:
+        "results/pipecomp_outputs/num_clusters.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/find_num_clusters.R {input}"
+rule compute_gsea_split:
+    input:
+        f"data/large_experiments/{{large_sample}}/{{large_sample}}-SCE.RDS",
+        f"results/pipecomp_outputs/{{large_sample}}/{{large_sample}}res.dataset1.endOutputs.rds"
+    output:
+        f"results/gsea_results/{{large_sample}}-{{combo_name}}-gsea.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+         mem_mb=35000
+    shell:
+        "Rscript code/metrics/gsea/run_gsea_split.R {input} {wildcards.combo_name}"
+
+rule make_metrics_matrices:
+    input:
+        expand("results/metrics/{{large_sample}}/metrics-{{large_sample}}-{combo_name}.csv",combo_name=combo_names)
+    output:
+        f"results/metrics/metrics_matrices/{{large_sample}}-metrics.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/make_metrics_matrix.R {input}"
+
+rule merge_singleR_annots_with_pipecomp_clusters:
+  input:
+    annot=f"data/singleR/E-GEOD-114530-singleR-results.RDS",
+    clusts=expand("results/pipecomp_outputs/clusters/E-GEOD-114530/{combo_name}.csv", combo_name=combo_names)
+  output:
+    expand("results/pipecomp_outputs/singleR_labelled_clusters/E-GEOD-114530/{combo_name}-singleR-labelled.csv", combo_name=combo_names)
+  container:
+      "../pipecomp-singularity.sif"
+  shell:
+    "Rscript code/singleR-annotation/mergeSingleRLabelsWithPipecompClusts.R {input.annot} {input.clusts}"
+
+rule compute_supervised_metrics_for_singleR_dataset:
+    input:
+        f"results/pipecomp_outputs/singleR_labelled_clusters/E-GEOD-114530/{{combo_name}}-singleR-labelled.csv"
+    output:
+        f"results/supervised_metrics/singleR/E-GEOD-114530/{{combo_name}}-singleR.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=30000
+    shell:
+        "python3 code/metrics/supervised_metrics.py --clust {input[0]}"
+rule make_supervised_matrices_for_singleR_dataset:
+    input:
+        expand("results/supervised_metrics/singleR/E-GEOD-114530/{combo_name}-singleR.csv", combo_name=combo_names)
+    output:
+        #expand("results/supervised_metrics/{{labelled_sample}}/{sup_metric}_unscaled.csv", sup_metric=["ari", "mi", "homo", "fm", "vm", "comp"])
+        f"results/supervised_metrics/metrics_matrices/E-GEOD-114530-supervised-singleR.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/make_supervised_matrices.R {input}"
+
+rule extract_colData:
+    input:
+        expand("data/large_experiments/{large_sample}/{large_sample}-SCE.RDS", large_sample=large_exps)
+    output:
+        f"data/large_experiments/large_samples-colData.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=150000
+    shell:
+        "Rscript code/metrics/extract_colData.R {input}"
+rule aggregate_all_metrics:
+    input:
+        expand("results/metrics/metrics_matrices/{large_sample}-metrics.csv", large_sample=large_exps)
+    output:
+        expand("results/metrics/large_samples-{metric}_unscaled.csv", metric=["sil", "db", "ch"]),
+        f"results/metrics/large_samples-all_metrics.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/aggregate_all_metrics.R {input}"
+rule create_design_matrix:
+    input:
+        f"results/metrics/large_samples-all_metrics.RDS",
+        f"data/large_experiments/large_samples-colData.RDS"
+    output:
+        f"data/large-samples_uncorrected_designMatrix_scaled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/create_design_matrix.R {input}"
+rule gene_expression_pca:
+    input:
+        expand("data/large_experiments/{large_sample}/{large_sample}-SCE.RDS", large_sample=large_exps)
+    output:
+        f"data/large_samples_avg_expr_pca.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    resources:
+        mem_mb=50000
+    shell:
+        "Rscript code/metrics/gene_expr_pca.R {input}"
+rule clean_RF_data:
+    input:
+        f"data/large-samples_uncorrected_designMatrix_scaled.RDS",
+        f"results/pipecomp_outputs/num_clusters.csv",
+        f"data/large_samples_avg_expr_pca.RDS"
+    output:
+        f"data/large_samples_uncorrected_designMatrix_scaled_cleaned.RDS",
+        f"results/pipecomp_outputs/large_samples_num_clusters_cleaned.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/randomForest/clean_RF_data.R {input}"
+rule make_gsea_matrices:
+    input:
+        expand("results/gsea_results/{{large_sample}}-{combo_name}-gsea.csv", combo_name=combo_names),
+        f"results/pipecomp_outputs/{{large_sample}}/{{large_sample}}res.dataset1.endOutputs.rds"
+    output:
+        f"results/gsea_results/gsea_matrices/{{large_sample}}-gsea.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/make_gsea_matrices.R {input}"
+rule average_gsea:
+    input:
+        f"results/gsea_results/gsea_matrices/{{large_sample}}-gsea.csv"
+    output:
+        f"results/gsea_results/gsea_matrices/{{large_sample}}-gsea-averaged.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/average_gsea.R {input}"
+rule aggregate_gsea_means:
+    input:
+        expand("results/gsea_results/gsea_matrices/{large_sample}-gsea-averaged.csv", large_sample=large_exps)
+    output:
+        f"results/gsea_results/large_samples_all_gsea_means.csv"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/aggregate_gsea_means.R {input}"
+rule correct_metrics:
+    input:
+        f"data/large_samples_uncorrected_designMatrix_scaled_cleaned.RDS",
+        f"results/pipecomp_outputs/large_samples_num_clusters_cleaned.RDS",
+        f"results/gsea_results/large_samples_all_gsea_means.csv"
+    output:
+        "data/large_samples_corrected_designMat_unscaled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/metrics/correct_metrics.R {input}"
+rule create_RF_mat:
+    input:
+        f"data/large_samples_corrected_designMat_unscaled.RDS",
+        f"data/corrected_designMat_unscaled.RDS",
+        f"data/train_test_split.RDS"
+    output:
+        f"data/large_samples_corrected_RF_testMatNumeric_unscaled.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/randomForest/createRFMatScaling.R {input}"
+rule predict_from_tuned_RF:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled.RDS",
+        f"data/large_samples_corrected_RF_testMatNumeric_unscaled.RDS",
+        expand("results/tuneRF/RFTuned{metric}_NumericParams.RDS", metric=metrics)
+    output:
+        f"results/models/randomForest/large_samples_RFPreds_NumericParams.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/randomForest/RFPredictFromTuned.R {input}"
+rule predict_from_tuned_RF_withMeta:
+    input:
+        f"data/corrected_RF_trainMatNumeric_unscaled_withMeta.RDS",
+        f"data/corrected_RF_testMatNumeric_unscaled_withMeta.RDS",
+        expand("results/tuneRF/RFTuned{metric}_NumericParams_withMeta.RDS", metric=metrics)
+    output:
+        f"results/models/randomForest/RFPreds_NumericParams_withMeta.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/randomForest/RFPredictFromTuned.R {input}"
+rule plot_RF_results:
+    input:
+        f"results/models/randomForest/RFPreds_NumericParams_withMeta.RDS",
+        f"data/corrected_designMat_unscaled_withMeta.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+    output:
+        f"results/figures/randomForest/allTermsInteractions/RFAllTermsInteractionsPlots_withMeta.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/randomForest/pipelinesOnlyPlotRFResults.R {input} {output}"
+rule plot_RF_results_large_samples:
+    input:
+        f"results/models/randomForest/large_samples_RFPreds_NumericParams.RDS",
+        f"data/large_samples_corrected_designMat_unscaled.RDS",
+        f"results/supervised_metrics/ari_unscaled_cleaned.RDS"
+    output:
+        f"results/figures/randomForest/allTermsInteractions/large_samples_RFAllTermsInteractionsPlots.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/randomForest/pipelinesOnlyPlotRFResults.R {input} {output}"
+rule predict_from_LR_int_on_large_samples:
+    input:
+        f"results/models/linearRegression/LR_int_allTerms_orig.RDS",
+        f"data/large_samples_corrected_RF_testMatNumeric_unscaled.RDS"
+    output:
+        "results/models/linearRegression/linear_regression_large_samples_preds.RDS"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/linearRegression/linear-regression-predict-large-samples.R {input}"
+rule plot_LR_int_featimp:
+    input:
+        f"results/models/linearRegression/LR_int_allTerms_orig.RDS"
+    output:
+        "results/figures/linearRegression/LR-int_featImp.pdf"
+    container:
+        "../pipecomp-singularity.sif"
+    shell:
+        "Rscript code/linearRegression/LR-int_featimp.R {input}"

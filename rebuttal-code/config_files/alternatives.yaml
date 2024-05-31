@@ -1,0 +1,37 @@
+---
+doubletmethod:
+  - none
+filt:
+   - filt.stringent
+   - filt.lenient
+   - filt.default
+#  - none
+norm:
+   - norm.seurat
+   - norm.sctransform
+   - norm.scran
+method:
+   - igraph
+sel:
+  - sel.vst
+selnb:
+  - 2000
+dr:
+  - seurat.pca
+clustmethod:
+  - clust.seurat
+dims:
+  - 10
+  - 15
+  - 20
+  - 30
+resolution:
+  - 0.01
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.5
+  - 0.8
+  - 1.0
+  - 1.2
+  - 2.0

@@ -1,0 +1,4 @@
+SamplingTypes:
+  - SCE-50
+  - SCE-75
+  - SCE-downsampleCounts-50
