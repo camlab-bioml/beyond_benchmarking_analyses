@@ -20,7 +20,7 @@ numbers_only <- function(x) {
 }
 
 
-models <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/LR_int_allTerms.RDS")
+models <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/LR_pipelinesOnly.RDS")
 #filename <- "LRIntPipelinesOnly.pdf"
 designMat <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/corrected_designMat_unscaled.RDS")
 ari <- readRDS("./Documents/2022_autoMLscRNA_Cindy/data/ari_unscaled_cleaned.RDS")
@@ -323,7 +323,7 @@ wilcoxLabelsARI <- cbind(wilcoxLabelsARI, metric=c("CH","DB","GSEA","SIL"))
 allARIdf <- mutate(allARIdf, metric=toupper(metric))
 wilcoxLabelsARI$wilcoxLabelsARI <- p.adjust(wilcoxLabelsARI$wilcoxLabelsARI, method="BH")
 
-pdf("./Documents/2022_autoMLscRNA_Cindy/PaperFigures/predictionsARICorBoxplotLRIntOrig_padj.pdf", width=5.25, height=6)
+pdf("./Documents/2022_autoMLscRNA_Cindy/PaperFigures/predictionsARICorBoxplotLRpipelinesOnly_padj.pdf", width=5.25, height=6)
 allARIdf$metricf <- factor(allARIdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
 ggplot(as.data.frame(allARIdf), aes(x=metricf, y=Cor, fill=metric))+
   geom_boxplot()+
@@ -486,7 +486,7 @@ corbpdf <- corbpdf %>%
 
 corbpdf$metricf <- factor(corbpdf$metric, levels=c("CH", "DB", "SIL", "GSEA"))
 
-pdf("./Documents/2022_autoMLscRNA_Cindy/PaperFigures/predictionMetricCorBoxplotLRIntOrig_padj.pdf", width=6.25, height=6.1)
+pdf("./Documents/2022_autoMLscRNA_Cindy/PaperFigures/predictionMetricCorBoxplotLRpipelinesOnly_padj.pdf", width=6.25, height=6.1)
 ggplot(corbpdf, aes(x=metricf, y=value, fill=metric))+
   geom_boxplot()+
   xlab("Metric")+
